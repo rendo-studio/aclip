@@ -4,7 +4,7 @@ import inspect
 from dataclasses import dataclass
 from typing import Any, Literal, get_args, get_origin
 
-from .contracts import ArgumentSpec, CommandGroupSpec, CommandSpec
+from .contracts import ArgumentSpec, CommandGroupSpec, CommandHandler, CommandSpec
 
 
 @dataclass(frozen=True)
@@ -25,8 +25,23 @@ class CommandGroupBuilder:
         *,
         summary: str | None = None,
         description: str | None = None,
+        arguments: list[ArgumentSpec] | None = None,
         examples: list[str] | None = None,
+        handler: CommandHandler | None = None,
     ):
+        if handler is not None:
+            command = command_from_handler(
+                name=name,
+                handler=handler,
+                summary=summary,
+                description=description,
+                arguments=arguments,
+                examples=examples,
+            )
+            self._node.commands.append(command)
+            self._app._refresh_compiled_tree()
+            return self
+
         def decorator(func: Any) -> Any:
             command = command_from_callable(
                 name=name,
@@ -72,6 +87,38 @@ def command_from_callable(
         arguments=arguments,
         examples=list(examples or []),
         handler=_callable_handler(func, arguments),
+    )
+
+
+def command_from_handler(
+    *,
+    name: str,
+    handler: CommandHandler,
+    summary: str | None,
+    description: str | None,
+    arguments: list[ArgumentSpec] | None,
+    examples: list[str] | None,
+) -> CommandSpec:
+    if arguments is None:
+        return command_from_callable(
+            name=name,
+            func=handler,
+            summary=summary,
+            description=description,
+            examples=examples,
+        )
+
+    parsed = parse_docstring(inspect.getdoc(handler) or "")
+    command_summary = summary or parsed.summary or _humanize_name(name)
+    command_description = description or parsed.description or f"{command_summary}."
+
+    return CommandSpec(
+        path=(name,),
+        summary=command_summary,
+        description=command_description,
+        arguments=list(arguments),
+        examples=list(examples or []),
+        handler=_callable_handler(handler, arguments),
     )
 
 

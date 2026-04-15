@@ -117,6 +117,47 @@ describe("AclipApp", () => {
     ]);
   });
 
+  test("supports fluent command registration on app and command groups", () => {
+    const app = new AclipApp({
+      name: "demo",
+      version: "0.1.0",
+      summary: "Demo CLI",
+      description: "Demo CLI for TypeScript SDK tests."
+    });
+
+    const appResult = app.command("version", {
+      summary: "Show version",
+      description: "Show the current demo version.",
+      examples: ["demo version"],
+      handler: () => ({ version: "0.1.0" })
+    });
+
+    const note = app.group("note", {
+      summary: "Manage notes",
+      description: "Create and list notes."
+    });
+
+    const groupResult = note.command("create", {
+      summary: "Create a note",
+      description: "Create a note in a local JSON store.",
+      examples: ["demo note create --title hello --body world"],
+      handler: () => ({ note: { title: "hello" } })
+    }).command("list", {
+      summary: "List notes",
+      description: "List notes from the local JSON store.",
+      examples: ["demo note list"],
+      handler: () => ({ notes: [] })
+    });
+
+    expect(appResult).toBe(app);
+    expect(groupResult).toBe(note);
+    expect(app.buildIndexManifest({ binaryName: "demo" }).commands).toEqual([
+      { path: "version", summary: "Show version" },
+      { path: "note create", summary: "Create a note" },
+      { path: "note list", summary: "List notes" }
+    ]);
+  });
+
   test("renders canonical markdown with next-step guidance", () => {
     const app = createApp();
 

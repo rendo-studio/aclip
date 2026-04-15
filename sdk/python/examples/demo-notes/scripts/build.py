@@ -11,13 +11,10 @@ for path in (PYTHON_SDK_ROOT / "src", EXAMPLE_ROOT / "src"):
         sys.path.insert(0, path_str)
 
 from aclip_demo_notes.app import create_app
-from aclip import package_binary
 
 
 def main() -> None:
-    package_binary(
-        app=create_app(),
-        binary_name="aclip-demo-notes",
+    create_app().build_cli(
         entry_script=EXAMPLE_ROOT / "src" / "aclip_demo_notes" / "__main__.py",
         project_root=EXAMPLE_ROOT,
         source_root=PYTHON_SDK_ROOT / "src",
@@ -27,4 +24,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

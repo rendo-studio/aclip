@@ -43,11 +43,11 @@ If you want the shortest install command, `aclip` is the official alias.
 ## What you get
 
 - `AclipApp` for tree-shaped CLI authoring
-- `group()` and `@group.command()` for a natural Python authoring flow
+- direct `handler=...` registration and decorator authoring
 - canonical ACLIP Markdown help rendering
 - structured JSON result and error envelopes
-- `package_binary()` for building a distributable binary CLI
-- `aclip-package` for packaging from the command line
+- `build_cli()` and `app.build_cli()` for building a distributable binary CLI
+- `aclip-build-cli` as the canonical packaging CLI entrypoint
 
 ## First Working CLI
 
@@ -61,31 +61,29 @@ from aclip import AclipApp
 
 app = AclipApp(
     name="notes",
-    version="0.1.1",
+    version="0.1.2",
     summary="A minimal notes CLI.",
     description="Create and list notes from a small local CLI.",
 )
-
-note = app.group(
-    "note",
-    summary="Manage notes",
-    description="Create and inspect notes.",
-)
-
-
-@note.command(
-    "create",
-    summary="Create a note",
-    examples=["notes note create --title hello --body world"],
-)
-def create(title: str, body: str) -> dict:
-    """Create a note.
+def create_note(title: str, body: str) -> dict:
+    """Create a note in a local JSON store.
 
     Args:
         title: Title for the note.
         body: Body text for the note.
     """
     return {"note": {"title": title, "body": body}}
+
+
+note = app.group(
+    "note",
+    summary="Manage notes",
+    description="Create and inspect notes.",
+).command(
+    "create",
+    handler=create_note,
+    examples=["notes note create --title hello --body world"],
+)
 
 
 if __name__ == "__main__":
@@ -103,19 +101,16 @@ notes note create --title hello --body world
 
 The final command returns a structured result envelope instead of ad hoc text.
 
+If you prefer decorators, `@app.command(...)` and `@group.command(...)` remain fully supported.
+
 ## Binary Packaging
 
 ```python
 from pathlib import Path
 
-from aclip import package_binary
-
-artifact = package_binary(
-    app=app,
-    binary_name="notes",
+artifact = app.build_cli(
     entry_script=Path("src/notes_cli/__main__.py"),
     project_root=Path(".").resolve(),
-    source_root=Path("src").resolve(),
 )
 
 print(artifact.binary_path)
@@ -126,6 +121,14 @@ This produces:
 
 - a runnable CLI binary
 - a sidecar `.aclip.json` manifest
+
+The lower-level `build_cli(...)` function is also available if you prefer a module-level API.
+
+The packaged CLI wrapper is:
+
+```bash
+aclip-build-cli --app-factory notes_cli.app:create_app --entry-script ./src/notes_cli/__main__.py
+```
 
 ## When to use ACLIP
 

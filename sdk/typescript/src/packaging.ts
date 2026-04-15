@@ -1,16 +1,16 @@
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import type { AclipApp } from "./app.js";
 
-export interface NodeCliArtifact {
+export interface CliArtifact {
   entryPath: string;
   manifestPath: string;
   manifest: Record<string, unknown>;
 }
 
-export interface PackageNodeCliOptions {
+export interface BuildCliOptions {
   app: AclipApp;
   executableName: string;
   packageName: string;
@@ -19,6 +19,11 @@ export interface PackageNodeCliOptions {
   projectRoot: string;
   outDir?: string;
 }
+
+/** @deprecated Use CliArtifact instead. */
+export type NodeCliArtifact = CliArtifact;
+/** @deprecated Use BuildCliOptions instead. */
+export type PackageNodeCliOptions = BuildCliOptions;
 
 export async function loadAppFactory(target: string): Promise<() => AclipApp> {
   const separator = target.lastIndexOf(":");
@@ -39,14 +44,43 @@ export async function loadAppFactory(target: string): Promise<() => AclipApp> {
   return factory as () => AclipApp;
 }
 
-export async function packageNodeCli(options: PackageNodeCliOptions): Promise<NodeCliArtifact> {
+/**
+ * @deprecated Use build_cli() instead.
+ */
+export async function packageNodeCli(options: PackageNodeCliOptions): Promise<CliArtifact> {
+  return build_cli({
+    app: options.app,
+    executableName: options.executableName,
+    packageName: options.packageName,
+    packageVersion: options.packageVersion,
+    entryFile: options.entryFile,
+    projectRoot: options.projectRoot,
+    outDir: options.outDir
+  });
+}
+
+export async function build_cli(
+  options: {
+    app: AclipApp;
+    entryFile: string;
+    projectRoot: string;
+    outDir?: string;
+    executableName?: string;
+    packageName?: string;
+    packageVersion?: string;
+  }
+): Promise<CliArtifact> {
   const { build } = await import("tsup");
   const outDir = options.outDir ?? resolve(options.projectRoot, "dist");
   mkdirSync(outDir, { recursive: true });
+  const packageMetadata = readPackageMetadata(options.projectRoot);
+  const executableName = options.executableName ?? options.app.name;
+  const packageName = options.packageName ?? packageMetadata.name;
+  const packageVersion = options.packageVersion ?? packageMetadata.version;
 
   await build({
     entry: {
-      [options.executableName]: options.entryFile
+      [executableName]: options.entryFile
     },
     outDir,
     format: ["cjs"],
@@ -63,7 +97,7 @@ export async function packageNodeCli(options: PackageNodeCliOptions): Promise<No
     }
   });
 
-  const entryPath = resolve(outDir, `${options.executableName}.cjs`);
+  const entryPath = resolve(outDir, `${executableName}.cjs`);
   try {
     chmodSync(entryPath, 0o755);
   } catch {
@@ -71,22 +105,37 @@ export async function packageNodeCli(options: PackageNodeCliOptions): Promise<No
   }
 
   const manifest = options.app.buildIndexManifest({
-    binaryName: options.executableName,
+    binaryName: executableName,
     distribution: [
       {
         kind: "npm_package",
-        package: options.packageName,
-        version: options.packageVersion,
-        executable: options.executableName
+        package: packageName,
+        version: packageVersion,
+        executable: executableName
       }
     ]
   });
-  const manifestPath = resolve(outDir, `${options.executableName}.aclip.json`);
+  const manifestPath = resolve(outDir, `${executableName}.aclip.json`);
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
 
   return {
     entryPath,
     manifestPath,
     manifest
+  };
+}
+
+function readPackageMetadata(projectRoot: string): { name: string; version: string } {
+  const packageJsonPath = resolve(projectRoot, "package.json");
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
+    name?: string;
+    version?: string;
+  };
+  if (!packageJson.name || !packageJson.version) {
+    throw new Error("package.json must define name and version for build_cli defaults");
+  }
+  return {
+    name: packageJson.name,
+    version: packageJson.version
   };
 }

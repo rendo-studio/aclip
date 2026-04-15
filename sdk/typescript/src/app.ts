@@ -17,6 +17,7 @@ import {
 import { CommanderBackendError, parseCommandArguments } from "./commanderBackend.js";
 import { renderHelpMarkdown } from "./renderMarkdown.js";
 import { encodeJson, errorEnvelope, resultEnvelope } from "./runtime.js";
+import type { CliArtifact } from "./packaging.js";
 
 export interface RunIo {
   stdout: (text: string) => void;
@@ -49,16 +50,17 @@ export class AclipApp {
     this.validateProtocolReservedSurfaces();
   }
 
-  command(name: string, registration: CommandRegistration): void {
+  command(name: string, registration: CommandRegistration): this {
     this.sourceCommands.push(createCommandSpec(name, registration));
     this.refreshCompiledTree();
+    return this;
   }
 
   group(name: string, registration: CommandGroupRegistration): CommandGroupBuilder {
     const group = createCommandGroupSpec(name, registration);
     this.sourceCommandGroups.push(group);
     this.refreshCompiledTree();
-    return new CommandGroupBuilder(this, group);
+    return new CommandGroupBuilder(group, () => this.refreshCompiledTree());
   }
 
   buildIndexManifest(options: BuildIndexManifestOptions): Record<string, unknown> {
@@ -177,6 +179,21 @@ export class AclipApp {
       io.stderr(encodeJson(errorEnvelope(parsed.command.path.join(" "), "execution_error", message)));
       return 1;
     }
+  }
+
+  async build_cli(options: {
+    entryFile: string;
+    projectRoot: string;
+    outDir?: string;
+    executableName?: string;
+    packageName?: string;
+    packageVersion?: string;
+  }): Promise<CliArtifact> {
+    const { build_cli } = await import("./packaging.js");
+    return build_cli({
+      app: this,
+      ...options
+    });
   }
 
   private buildCommandDetail(command: CommandSpec): HelpCommandPayload {
@@ -343,18 +360,22 @@ export class AclipApp {
 }
 
 export class CommandGroupBuilder {
-  constructor(private readonly app: AclipApp, private readonly node: CommandGroupSpec) {}
+  constructor(
+    private readonly node: CommandGroupSpec,
+    private readonly onTreeChanged: () => void
+  ) {}
 
-  command(name: string, registration: CommandRegistration): void {
+  command(name: string, registration: CommandRegistration): this {
     this.node.commands.push(createCommandSpec(name, registration));
-    this.app["refreshCompiledTree"]();
+    this.onTreeChanged();
+    return this;
   }
 
   group(name: string, registration: CommandGroupRegistration): CommandGroupBuilder {
     const group = createCommandGroupSpec(name, registration);
     this.node.commandGroups.push(group);
-    this.app["refreshCompiledTree"]();
-    return new CommandGroupBuilder(this.app, group);
+    this.onTreeChanged();
+    return new CommandGroupBuilder(group, this.onTreeChanged);
   }
 }
 

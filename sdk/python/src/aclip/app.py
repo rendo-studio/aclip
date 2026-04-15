@@ -6,8 +6,8 @@ import sys
 from typing import Any
 
 from .click_backend import ClickParserError, parse_command_arguments
-from .contracts import CommandGroupSpec, CommandSpec, CredentialSpec, DistributionSpec
-from .decorators import CommandGroupBuilder, command_from_callable
+from .contracts import ArgumentSpec, CommandGroupSpec, CommandSpec, CredentialSpec, DistributionSpec
+from .decorators import CommandGroupBuilder, command_from_callable, command_from_handler
 from .render_markdown import render_help_markdown
 from .runtime import encode_json, error_envelope, result_envelope
 
@@ -225,8 +225,23 @@ class AclipApp:
         *,
         summary: str | None = None,
         description: str | None = None,
+        arguments: list[ArgumentSpec] | None = None,
         examples: list[str] | None = None,
+        handler: Any | None = None,
     ):
+        if handler is not None:
+            command = command_from_handler(
+                name=name,
+                handler=handler,
+                summary=summary,
+                description=description,
+                arguments=arguments,
+                examples=examples,
+            )
+            self._source_commands.append(command)
+            self._refresh_compiled_tree()
+            return self
+
         def decorator(func: Any) -> Any:
             command = command_from_callable(
                 name=name,
@@ -250,6 +265,34 @@ class AclipApp:
         self._source_command_groups.append(group)
         self._refresh_compiled_tree()
         return CommandGroupBuilder(self, group)
+
+    def build_cli(
+        self,
+        *,
+        entry_script: Any,
+        project_root: Any,
+        source_root: Any | None = None,
+        extra_paths: list[Any] | None = None,
+        executable_name: str | None = None,
+        dist_dir: Any | None = None,
+        build_dir: Any | None = None,
+        runner: Any | None = None,
+        platform_value: str | None = None,
+    ):
+        from .packaging import build_cli
+
+        return build_cli(
+            app=self,
+            entry_script=entry_script,
+            project_root=project_root,
+            source_root=source_root,
+            extra_paths=extra_paths,
+            executable_name=executable_name,
+            dist_dir=dist_dir,
+            build_dir=build_dir,
+            runner=runner,
+            platform_value=platform_value,
+        )
 
     def _find_command(self, path_parts: list[str]) -> CommandSpec:
         path = tuple(path_parts)

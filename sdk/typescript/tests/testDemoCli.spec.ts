@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 
 import { describe, expect, test } from "vitest";
 
-import { loadAppFactory, packageNodeCli } from "../src/index.js";
+import { build_cli, loadAppFactory } from "../src/index.js";
 
 function currentDir() {
   return fileURLToPath(new URL(".", import.meta.url));
@@ -21,7 +21,7 @@ describe("demo notes CLI", () => {
       `${resolve(projectRoot, "examples", "demo-notes", "src", "app.ts")}:createApp`
     );
 
-    const artifact = await packageNodeCli({
+    const artifact = await build_cli({
       app: appFactory(),
       executableName: "aclip-demo-notes",
       packageName: "@aclip/demo-notes",
@@ -54,7 +54,7 @@ describe("demo notes CLI", () => {
       `${resolve(projectRoot, "examples", "demo-notes", "src", "app.ts")}:createApp`
     );
 
-    const artifact = await packageNodeCli({
+    const artifact = await build_cli({
       app: appFactory(),
       executableName: "aclip-demo-notes",
       packageName: "@aclip/demo-notes",

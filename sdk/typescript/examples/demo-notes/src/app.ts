@@ -32,51 +32,51 @@ export function createApp(): AclipApp {
     description: "Create and list notes in the local JSON store."
   });
 
-  note.command("create", {
-    summary: "Create a note",
-    description: "Create a note in a local JSON store.",
-    arguments: [
-      stringArgument("title", { required: true, description: "Title for the note." }),
-      stringArgument("body", { required: true, description: "Body text for the note." }),
-      stringArgument("store", {
-        description: "Path to the local note store.",
-        defaultValue: ".aclip-demo-notes.json"
-      })
-    ],
-    examples: ["aclip-demo-notes note create --title hello --body world"],
-    handler: (payload) => {
-      const title = String(payload.title);
-      const body = String(payload.body);
-      const store = String(payload.store ?? ".aclip-demo-notes.json");
-      const notes = loadNotes(store);
-      const noteRecord = { title, body };
-      notes.push(noteRecord);
-      saveNotes(store, notes);
-      return {
-        note: noteRecord,
-        store
-      };
-    }
-  });
-
-  note.command("list", {
-    summary: "List notes",
-    description: "List notes from the local JSON store.",
-    arguments: [
-      stringArgument("store", {
-        description: "Path to the local note store.",
-        defaultValue: ".aclip-demo-notes.json"
-      })
-    ],
-    examples: ["aclip-demo-notes note list"],
-    handler: (payload) => {
-      const store = String(payload.store ?? ".aclip-demo-notes.json");
-      return {
-        notes: loadNotes(store),
-        store
-      };
-    }
-  });
+  note
+    .command("create", {
+      summary: "Create a note",
+      description: "Create a note in a local JSON store.",
+      arguments: [
+        stringArgument("title", { required: true, description: "Title for the note." }),
+        stringArgument("body", { required: true, description: "Body text for the note." }),
+        stringArgument("store", {
+          description: "Path to the local note store.",
+          defaultValue: ".aclip-demo-notes.json"
+        })
+      ],
+      examples: ["aclip-demo-notes note create --title hello --body world"],
+      handler: (payload) => {
+        const title = String(payload.title);
+        const body = String(payload.body);
+        const store = String(payload.store ?? ".aclip-demo-notes.json");
+        const notes = loadNotes(store);
+        const noteRecord = { title, body };
+        notes.push(noteRecord);
+        saveNotes(store, notes);
+        return {
+          note: noteRecord,
+          store
+        };
+      }
+    })
+    .command("list", {
+      summary: "List notes",
+      description: "List notes from the local JSON store.",
+      arguments: [
+        stringArgument("store", {
+          description: "Path to the local note store.",
+          defaultValue: ".aclip-demo-notes.json"
+        })
+      ],
+      examples: ["aclip-demo-notes note list"],
+      handler: (payload) => {
+        const store = String(payload.store ?? ".aclip-demo-notes.json");
+        return {
+          notes: loadNotes(store),
+          store
+        };
+      }
+    });
 
   return app;
 }
