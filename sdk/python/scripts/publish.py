@@ -119,12 +119,14 @@ def check() -> None:
 def publish() -> None:
     token = os.environ.get("PYPI_TOKEN")
     if not token:
-        raise SystemExit("PYPI_TOKEN is required.")
+        raise SystemExit("PYPI_TOKEN is required. PyPI no longer supports username/password uploads.")
     check()
     env = os.environ.copy()
     env["TWINE_USERNAME"] = "__token__"
     env["TWINE_PASSWORD"] = token
-    run([sys.executable, "-m", "twine", "upload", *dist_files()], env=env)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+    run([sys.executable, "-m", "twine", "upload", "--non-interactive", *dist_files()], env=env)
 
 
 def main() -> None:
