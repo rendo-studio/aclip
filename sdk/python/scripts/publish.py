@@ -48,13 +48,92 @@ def alias_readme(version: str) -> str:
         f"""\
         # aclip
 
-        `aclip` is the synchronized PyPI alias for `rendo-aclip`.
+        `aclip` is the official short-name Python package for ACLIP.
 
-        Why this package exists:
+        It is published in lockstep with `rendo-aclip` and installs the same SDK release.
 
-        - `rendo-aclip` is the canonical first-party package name
-        - `aclip` is the short-name compatibility and competitive alias
-        - both names should always ship the same release
+        Use `aclip` if you want the shortest install command.
+        Use `rendo-aclip` if you want the canonical dependency name in project manifests.
+
+        ## Install
+
+        Short-name install:
+
+        ```bash
+        pip install aclip
+        ```
+
+        Canonical install:
+
+        ```bash
+        pip install rendo-aclip
+        ```
+
+        Either way, the import path is:
+
+        ```python
+        from aclip import AclipApp
+        ```
+
+        ## What ACLIP gives you
+
+        - natural CLI invocation
+        - progressive Markdown help
+        - structured result and error envelopes
+        - sidecar manifests for distribution metadata
+        - packaging helpers for shipping binary CLIs
+
+        ## First Working CLI
+
+        ```python
+        from __future__ import annotations
+
+        import sys
+
+        from aclip import AclipApp
+
+
+        app = AclipApp(
+            name="notes",
+            version="{version}",
+            summary="A minimal notes CLI.",
+            description="Create and list notes from a small local CLI.",
+        )
+
+        note = app.group(
+            "note",
+            summary="Manage notes",
+            description="Create and inspect notes.",
+        )
+
+
+        @note.command(
+            "create",
+            summary="Create a note",
+            examples=["notes note create --title hello --body world"],
+        )
+        def create(title: str, body: str) -> dict:
+            \"\"\"Create a note.
+
+            Args:
+                title: Title for the note.
+                body: Body text for the note.
+            \"\"\"
+            return {{"note": {{"title": title, "body": body}}}}
+
+
+        if __name__ == "__main__":
+            raise SystemExit(app.run(sys.argv[1:]))
+        ```
+
+        Typical usage:
+
+        ```bash
+        notes --help
+        notes note --help
+        notes note create --help
+        notes note create --title hello --body world
+        ```
 
         Installing `aclip` installs `rendo-aclip=={version}`.
         """

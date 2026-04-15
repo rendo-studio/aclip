@@ -2,9 +2,14 @@
 
 `@rendo-studio/aclip` is the TypeScript reference adapter for ACLIP.
 
-It does not define the protocol.
+It is the canonical npm package for building ACLIP-compatible CLIs in TypeScript and Node.js.
 
-It implements the shared ACLIP contracts maintained by the ACLIP repository and provides TypeScript authoring, runtime, and packaging helpers for ACLIP-compatible CLIs.
+ACLIP keeps CLI usage natural while standardizing the parts agents actually depend on:
+
+- progressive Markdown help
+- structured result and error envelopes
+- sidecar manifests for distribution metadata
+- packaging helpers for shipping runnable CLI artifacts
 
 ## What it provides
 
@@ -20,14 +25,14 @@ It implements the shared ACLIP contracts maintained by the ACLIP repository and 
 npm install @rendo-studio/aclip commander
 ```
 
-## Quick Start
+## First Working CLI
 
 ```ts
 import { AclipApp, stringArgument } from "@rendo-studio/aclip";
 
 const app = new AclipApp({
   name: "demo",
-  version: "0.1.0",
+  version: "0.1.1",
   summary: "Demo CLI",
   description: "Demo CLI."
 });
@@ -63,7 +68,7 @@ await packageNodeCli({
   app,
   executableName: "demo",
   packageName: "@aclip/demo",
-  packageVersion: "0.1.0",
+  packageVersion: "0.1.1",
   entryFile: "./src/cli.ts",
   projectRoot: process.cwd()
 });
@@ -73,6 +78,19 @@ This writes:
 
 - a runnable bundled Node CLI artifact
 - a sidecar `demo.aclip.json` manifest with `npm_package` distribution metadata
+
+## Typical CLI Usage
+
+```bash
+demo --help
+demo note --help
+demo note create --help
+demo note create --title hello --body world
+```
+
+## Repository
+
+- <https://github.com/rendo-studio/aclip>
 
 ## Local Verification
 
