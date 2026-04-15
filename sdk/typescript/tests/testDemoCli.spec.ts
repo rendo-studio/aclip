@@ -6,7 +6,7 @@ import { spawnSync } from "node:child_process";
 
 import { describe, expect, test } from "vitest";
 
-import { build_cli, loadAppFactory } from "../src/index.js";
+import { build_cli } from "../src/index.js";
 
 function currentDir() {
   return fileURLToPath(new URL(".", import.meta.url));
@@ -16,17 +16,11 @@ describe("demo notes CLI", () => {
   test("prints canonical markdown help from the bundled node artifact", async () => {
     const projectRoot = resolve(currentDir(), "..");
     const outDir = mkdtempSync(resolve(tmpdir(), "aclip-ts-demo-"));
-    const entryFile = resolve(projectRoot, "examples", "demo-notes", "src", "cli.ts");
-    const appFactory = await loadAppFactory(
-      `${resolve(projectRoot, "examples", "demo-notes", "src", "app.ts")}:createApp`
-    );
-
     const artifact = await build_cli({
-      app: appFactory(),
+      appFactory: `${resolve(projectRoot, "examples", "demo-notes", "src", "app.ts")}:createApp`,
       executableName: "aclip-demo-notes",
       packageName: "@aclip/demo-notes",
       packageVersion: "0.1.0",
-      entryFile,
       projectRoot,
       outDir
     });
@@ -48,18 +42,12 @@ describe("demo notes CLI", () => {
   test("executes bundled commands and emits result envelopes", async () => {
     const projectRoot = resolve(currentDir(), "..");
     const outDir = mkdtempSync(resolve(tmpdir(), "aclip-ts-demo-"));
-    const entryFile = resolve(projectRoot, "examples", "demo-notes", "src", "cli.ts");
     const storePath = resolve(outDir, "notes.json");
-    const appFactory = await loadAppFactory(
-      `${resolve(projectRoot, "examples", "demo-notes", "src", "app.ts")}:createApp`
-    );
-
     const artifact = await build_cli({
-      app: appFactory(),
+      appFactory: `${resolve(projectRoot, "examples", "demo-notes", "src", "app.ts")}:createApp`,
       executableName: "aclip-demo-notes",
       packageName: "@aclip/demo-notes",
       packageVersion: "0.1.0",
-      entryFile,
       projectRoot,
       outDir
     });

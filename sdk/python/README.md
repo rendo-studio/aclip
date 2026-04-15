@@ -2,21 +2,14 @@
 
 `rendo-aclip` is the canonical Python SDK for ACLIP, the Agent Command Line Interface Protocol.
 
-ACLIP keeps normal CLI invocation natural:
-
-- `tool --help`
-- `tool group --help`
-- `tool command --help`
-- `tool command --flag value`
-
-At the same time, it standardizes the parts agents actually depend on:
+It keeps normal CLI usage natural while standardizing the parts agents actually depend on:
 
 - progressive Markdown help
 - structured result and error envelopes
-- sidecar manifests for registry and distribution flows
+- sidecar manifests for distribution metadata
 - packaging helpers for shipping runnable CLI artifacts
 
-## Which package name should I install?
+## Install
 
 Canonical package:
 
@@ -36,103 +29,104 @@ Both install paths are first-party and synchronized. The import path is the same
 from aclip import AclipApp
 ```
 
-If you want the official dependency name for long-term project manifests, prefer `rendo-aclip`.
-
+If you want the canonical dependency name in project manifests, prefer `rendo-aclip`.
 If you want the shortest install command, `aclip` is the official alias.
 
-## What you get
+## Smallest End-to-End CLI
 
-- `AclipApp` for tree-shaped CLI authoring
-- direct `handler=...` registration and decorator authoring
-- canonical ACLIP Markdown help rendering
-- structured JSON result and error envelopes
-- `build_cli()` and `app.build_cli()` for building a distributable binary CLI
-- `aclip-build-cli` as the canonical packaging CLI entrypoint
-
-## First Working CLI
+`src/notes_cli/app.py`
 
 ```python
-from __future__ import annotations
-
-import sys
-
 from aclip import AclipApp
 
 
-app = AclipApp(
-    name="notes",
-    version="0.1.2",
-    summary="A minimal notes CLI.",
-    description="Create and list notes from a small local CLI.",
-)
-def create_note(title: str, body: str) -> dict:
-    """Create a note in a local JSON store.
+def create_app() -> AclipApp:
+    app = AclipApp(
+        name="notes",
+        version="0.2.0",
+        summary="A minimal notes CLI.",
+        description="Create and list notes from a small local CLI.",
+    )
 
-    Args:
-        title: Title for the note.
-        body: Body text for the note.
-    """
-    return {"note": {"title": title, "body": body}}
+    def create_note(title: str, body: str) -> dict:
+        """Create a note in a local JSON store.
+
+        Args:
+            title: Title for the note.
+            body: Body text for the note.
+        """
+        return {"note": {"title": title, "body": body}}
+
+    app.group(
+        "note",
+        summary="Manage notes",
+        description="Create and inspect notes.",
+    ).command(
+        "create",
+        handler=create_note,
+        examples=["notes note create --title hello --body world"],
+    )
+
+    return app
+```
+
+`src/notes_cli/__main__.py`
+
+```python
+from aclip import cli_main
 
 
-note = app.group(
-    "note",
-    summary="Manage notes",
-    description="Create and inspect notes.",
-).command(
-    "create",
-    handler=create_note,
-    examples=["notes note create --title hello --body world"],
-)
-
-
-if __name__ == "__main__":
-    raise SystemExit(app.run(sys.argv[1:]))
+cli_main("notes_cli.app:create_app")
 ```
 
 Run it like a normal CLI:
 
 ```bash
-notes --help
-notes note --help
-notes note create --help
-notes note create --title hello --body world
+python -m notes_cli --help
+python -m notes_cli note --help
+python -m notes_cli note create --help
+python -m notes_cli note create --title hello --body world
 ```
 
-The final command returns a structured result envelope instead of ad hoc text.
+The final command emits a structured result envelope instead of ad hoc text.
 
-If you prefer decorators, `@app.command(...)` and `@group.command(...)` remain fully supported.
+## Build A Distributable CLI
 
-## Binary Packaging
+From a dedicated build script:
 
 ```python
-from pathlib import Path
+from aclip import build_cli
 
-artifact = app.build_cli(
-    entry_script=Path("src/notes_cli/__main__.py"),
-    project_root=Path(".").resolve(),
+
+artifact = build_cli(
+    app_factory="notes_cli.app:create_app",
 )
 
 print(artifact.binary_path)
 print(artifact.manifest_path)
 ```
 
-This produces:
+`app_factory` is the import target the packaged binary will execute at runtime.
+That is why the recommended pattern is a separate `build.py` script instead of having the app object “build itself”.
 
-- a runnable CLI binary
-- a sidecar `.aclip.json` manifest
+In a conventional project layout, ACLIP infers:
 
-The lower-level `build_cli(...)` function is also available if you prefer a module-level API.
+- project root
+- source root
+- executable name
 
-The packaged CLI wrapper is:
+Advanced overrides such as `project_root`, `source_root`, and `extra_paths` are still available for monorepos or non-standard layouts, but they are no longer the default path.
 
-```bash
-aclip-build-cli --app-factory notes_cli.app:create_app --entry-script ./src/notes_cli/__main__.py
-```
+## What You Get
 
-## When to use ACLIP
+- `AclipApp` for tree-shaped CLI authoring
+- direct `handler=...` registration and decorator authoring
+- `cli_main(...)` so launchers do not need manual `sys.argv[1:]`
+- `build_cli()` as the canonical packaging API
 
-Use `rendo-aclip` when you want to build a CLI that should feel natural to normal command-line users while also giving agents:
+## When To Use ACLIP
+
+Use `rendo-aclip` when you want a CLI that still feels natural to command-line users while giving agents:
 
 - predictable help disclosure
 - predictable machine-readable command results
@@ -142,7 +136,4 @@ If your goal is only a human-first CLI with free-form text output, ACLIP is prob
 
 ## Repository
 
-Source repository:
-
 - <https://github.com/rendo-studio/aclip>
-

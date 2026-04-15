@@ -17,7 +17,6 @@ import {
 import { CommanderBackendError, parseCommandArguments } from "./commanderBackend.js";
 import { renderHelpMarkdown } from "./renderMarkdown.js";
 import { encodeJson, errorEnvelope, resultEnvelope } from "./runtime.js";
-import type { CliArtifact } from "./packaging.js";
 
 export interface RunIo {
   stdout: (text: string) => void;
@@ -143,7 +142,7 @@ export class AclipApp {
     };
   }
 
-  async run(argv: string[], io: RunIo = defaultIo()): Promise<number> {
+  async run(argv: string[] = process.argv.slice(2), io: RunIo = defaultIo()): Promise<number> {
     if (!argv.length) {
       io.stdout(renderHelpMarkdown(this.buildHelpPayload(), this.name));
       return 0;
@@ -179,21 +178,6 @@ export class AclipApp {
       io.stderr(encodeJson(errorEnvelope(parsed.command.path.join(" "), "execution_error", message)));
       return 1;
     }
-  }
-
-  async build_cli(options: {
-    entryFile: string;
-    projectRoot: string;
-    outDir?: string;
-    executableName?: string;
-    packageName?: string;
-    packageVersion?: string;
-  }): Promise<CliArtifact> {
-    const { build_cli } = await import("./packaging.js");
-    return build_cli({
-      app: this,
-      ...options
-    });
   }
 
   private buildCommandDetail(command: CommandSpec): HelpCommandPayload {

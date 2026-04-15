@@ -8,6 +8,7 @@ import { describe, expect, test, vi } from "vitest";
 import {
   AclipApp,
   booleanArgument,
+  cliMain,
   integerArgument,
   renderHelpMarkdown,
   stringArgument
@@ -229,5 +230,26 @@ describe("AclipApp", () => {
     } finally {
       stderrSpy.mockRestore();
     }
+  });
+
+  test("cliMain uses process argv by default", async () => {
+    const app = createApp();
+    const originalArgv = process.argv;
+    const writes: string[] = [];
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(((chunk: string | Uint8Array) => {
+      writes.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write);
+
+    process.argv = ["node", "demo", "note", "list"];
+    try {
+      const exitCode = await cliMain(app, undefined);
+      expect(exitCode).toBe(0);
+    } finally {
+      stdoutSpy.mockRestore();
+      process.argv = originalArgv;
+    }
+
+    expect(JSON.parse(writes.join("")).command).toBe("note list");
   });
 });

@@ -1,23 +1,13 @@
 # @rendo-studio/aclip
 
-`@rendo-studio/aclip` is the TypeScript reference adapter for ACLIP.
+`@rendo-studio/aclip` is the canonical TypeScript SDK for ACLIP.
 
-It is the canonical npm package for building ACLIP-compatible CLIs in TypeScript and Node.js.
-
-ACLIP keeps CLI usage natural while standardizing the parts agents actually depend on:
+It keeps normal CLI usage natural while standardizing the parts agents actually depend on:
 
 - progressive Markdown help
 - structured result and error envelopes
 - sidecar manifests for distribution metadata
 - packaging helpers for shipping runnable CLI artifacts
-
-## What it provides
-
-- tree-shaped authoring with `AclipApp`, `group()`, and `command()`
-- canonical ACLIP runtime help payloads
-- canonical Markdown `--help` rendering
-- structured result and error envelopes
-- Node-friendly packaging through `build_cli()` and `app.build_cli()`
 
 ## Install
 
@@ -25,75 +15,92 @@ ACLIP keeps CLI usage natural while standardizing the parts agents actually depe
 npm install @rendo-studio/aclip commander
 ```
 
-## First Working CLI
+## Smallest End-to-End CLI
+
+`src/app.ts`
 
 ```ts
 import { AclipApp, stringArgument } from "@rendo-studio/aclip";
 
-const app = new AclipApp({
-  name: "demo",
-  version: "0.1.2",
-  summary: "Demo CLI",
-  description: "Demo CLI."
-});
+export function createApp() {
+  const app = new AclipApp({
+    name: "notes",
+    version: "0.2.0",
+    summary: "A minimal notes CLI.",
+    description: "Create and list notes from a small local CLI."
+  });
 
-const note = app.group("note", {
-  summary: "Manage notes",
-  description: "Create and list notes."
-});
-
-note
-  .command("create", {
+  app.group("note", {
+    summary: "Manage notes",
+    description: "Create and inspect notes."
+  }).command("create", {
     summary: "Create a note",
     description: "Create a note in a local JSON store.",
     arguments: [
       stringArgument("title", { required: true, description: "Title for the note." }),
       stringArgument("body", { required: true, description: "Body text for the note." })
     ],
-    examples: ["demo note create --title hello --body world"],
+    examples: ["notes note create --title hello --body world"],
     handler: ({ title, body }) => ({
       note: { title, body }
     })
-  })
-  .command("list", {
-    summary: "List notes",
-    description: "List notes from the local JSON store.",
-    examples: ["demo note list"],
-    handler: () => ({ notes: [] })
   });
 
-const exitCode = await app.run(process.argv.slice(2));
-process.exitCode = exitCode;
+  return app;
+}
 ```
 
-## Packaging
+`src/cli.ts`
 
 ```ts
-await app.build_cli({
-  entryFile: "./src/cli.ts",
-  projectRoot: process.cwd()
+import { cliMain } from "@rendo-studio/aclip";
+
+import { createApp } from "./app.js";
+
+void cliMain(createApp);
+```
+
+Run it like a normal CLI:
+
+```bash
+node --import tsx ./src/cli.ts --help
+node --import tsx ./src/cli.ts note --help
+node --import tsx ./src/cli.ts note create --help
+node --import tsx ./src/cli.ts note create --title hello --body world
+```
+
+The final command emits a structured result envelope instead of ad hoc text.
+
+## Build A Distributable CLI
+
+From a dedicated build script:
+
+```ts
+import { build_cli } from "@rendo-studio/aclip";
+
+await build_cli({
+  appFactory: "./src/app.ts:createApp"
 });
 ```
 
-Or use the packaged CLI wrapper:
+`appFactory` is the module export that the packaged CLI will execute at runtime.
+That is why the recommended pattern is a separate `build.ts` script instead of having the app object “build itself”.
 
-```bash
-aclip-build-cli --app-factory ./src/app.ts:createApp --entry-file ./src/cli.ts
-```
+In a conventional project layout, ACLIP infers:
 
-This writes:
+- project root
+- package name and version
+- executable name
 
-- a runnable bundled Node CLI artifact
-- a sidecar `demo.aclip.json` manifest with `npm_package` distribution metadata
+Advanced overrides such as `projectRoot`, `outDir`, `packageName`, and `packageVersion` are still available for monorepos or unusual build layouts, but they are no longer the default path.
 
-## Typical CLI Usage
+## What You Get
 
-```bash
-demo --help
-demo note --help
-demo note create --help
-demo note create --title hello --body world
-```
+- tree-shaped authoring with `AclipApp`, `group()`, and `command()`
+- `cliMain(...)` so launchers do not need manual `process.argv.slice(2)`
+- canonical ACLIP Markdown help rendering
+- structured result and error envelopes
+- `build_cli()` as the canonical packaging API
 
 ## Repository
 

@@ -1,7 +1,5 @@
-import { createApp } from "./app.js";
+import { cliMain } from "../../../src/index";
 
-createApp()
-  .run(process.argv.slice(2))
-  .then((exitCode) => {
-    process.exitCode = exitCode;
-  });
+import { createApp } from "./app";
+
+void cliMain(createApp);

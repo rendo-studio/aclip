@@ -86,44 +86,32 @@ def alias_readme(version: str) -> str:
         ## First Working CLI
 
         ```python
-        from __future__ import annotations
-
-        import sys
-
-        from aclip import AclipApp
+        from aclip import AclipApp, cli_main
 
 
-        app = AclipApp(
-            name="notes",
-            version="{version}",
-            summary="A minimal notes CLI.",
-            description="Create and list notes from a small local CLI.",
-        )
+        def create_app() -> AclipApp:
+            app = AclipApp(
+                name="notes",
+                version="{version}",
+                summary="A minimal notes CLI.",
+                description="Create and list notes from a small local CLI.",
+            )
 
-        note = app.group(
-            "note",
-            summary="Manage notes",
-            description="Create and inspect notes.",
-        )
+            app.group(
+                "note",
+                summary="Manage notes",
+                description="Create and inspect notes.",
+            ).command(
+                "create",
+                summary="Create a note",
+                examples=["notes note create --title hello --body world"],
+                handler=lambda title, body: {{"note": {{"title": title, "body": body}}}},
+            )
 
-
-        @note.command(
-            "create",
-            summary="Create a note",
-            examples=["notes note create --title hello --body world"],
-        )
-        def create(title: str, body: str) -> dict:
-            \"\"\"Create a note.
-
-            Args:
-                title: Title for the note.
-                body: Body text for the note.
-            \"\"\"
-            return {{"note": {{"title": title, "body": body}}}}
+            return app
 
 
-        if __name__ == "__main__":
-            raise SystemExit(app.run(sys.argv[1:]))
+        cli_main("notes_cli.app:create_app")
         ```
 
         Typical usage:

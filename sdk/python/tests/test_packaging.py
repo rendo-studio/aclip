@@ -1,15 +1,14 @@
 import hashlib
 import json
-import os
-import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 from jsonschema import validate
 
 from aclip_demo_notes.app import create_app
-from aclip import DistributionSpec
-from aclip.packaging import build_cli, load_app_factory
+from aclip import AclipApp, DistributionSpec, cli_main
+from aclip.packaging import build_cli, inspect_app_factory, load_app_factory
 from aclip.schema import load_schema
 
 
@@ -24,30 +23,34 @@ def test_build_cli_invokes_runner_and_writes_manifest(tmp_path: Path):
     project_root = tmp_path
     source_root = project_root / "src"
     source_root.mkdir()
-    example_root = project_root / "examples" / "demo-notes" / "src"
-    example_root.mkdir(parents=True)
-    entry_script = source_root / "demo_main.py"
-    entry_script.write_text("print('demo')", encoding="utf-8")
-
+    extra_root = project_root / "shared"
+    extra_root.mkdir()
     dist_dir = project_root / "dist"
     build_dir = project_root / "build"
     binary_name = "aclip-demo-notes.exe"
+    launcher_script: Path | None = None
 
     def fake_runner(command: list[str], cwd: Path) -> None:
+        nonlocal launcher_script
         assert command[0].endswith("python.exe") or command[0].endswith("python")
         assert command[1:5] == ["-m", "PyInstaller", "--noconfirm", "--clean"]
-        assert command.count("--paths") == 2
+        python_sdk_root = Path(__file__).resolve().parents[1] / "src"
+        assert command.count("--paths") == 3
         assert str(source_root) in command
-        assert str(example_root) in command
+        assert str(extra_root) in command
+        assert str(python_sdk_root) in command
         assert cwd == project_root
+        launcher_script = Path(command[-1])
+        assert launcher_script.exists()
+        assert "cli_main('aclip_demo_notes.app:create_app')" in launcher_script.read_text(encoding="utf-8")
         dist_dir.mkdir(exist_ok=True)
         (dist_dir / binary_name).write_bytes(b"demo-binary")
 
     artifact = build_cli(
-        app=create_app(),
-        entry_script=entry_script,
+        app_factory="aclip_demo_notes.app:create_app",
         project_root=project_root,
-        extra_paths=[example_root],
+        source_root=source_root,
+        extra_paths=[extra_root],
         dist_dir=dist_dir,
         build_dir=build_dir,
         runner=fake_runner,
@@ -68,37 +71,42 @@ def test_build_cli_invokes_runner_and_writes_manifest(tmp_path: Path):
         }
     ]
     validate(manifest, load_schema("manifest"))
+    assert launcher_script is not None
+    assert not launcher_script.exists()
 
 
-def test_app_build_cli_is_app_centric_and_infers_source_root(tmp_path: Path):
-    project_root = tmp_path
-    source_root = project_root / "src"
-    source_root.mkdir()
-    entry_script = source_root / "__main__.py"
-    entry_script.write_text("print('demo')", encoding="utf-8")
-
+def test_build_cli_auto_includes_local_sdk_source_root_for_repo_layout(tmp_path: Path):
     captured: dict[str, object] = {}
 
     def fake_runner(command: list[str], cwd: Path) -> None:
         captured["command"] = command
         captured["cwd"] = cwd
-        dist_dir = project_root / "dist"
+        dist_dir = tmp_path / "dist"
         dist_dir.mkdir(exist_ok=True)
         (dist_dir / "aclip-demo-notes.exe").write_bytes(b"demo-binary")
 
-    artifact = create_app().build_cli(
-        entry_script=entry_script,
-        project_root=project_root,
+    artifact = build_cli(
+        app_factory="aclip_demo_notes.app:create_app",
+        dist_dir=tmp_path / "dist",
+        build_dir=tmp_path / "build",
         runner=fake_runner,
     )
 
     command = captured["command"]
     assert isinstance(command, list)
-    assert "--name" in command
-    assert command[command.index("--name") + 1] == "aclip-demo-notes"
-    assert command.count("--paths") == 1
-    assert str(source_root) in command
+    python_sdk_root = Path(__file__).resolve().parents[1] / "src"
+    example_source_root = Path(__file__).resolve().parents[1] / "examples" / "demo-notes" / "src"
+    assert command.count("--paths") == 2
+    assert str(example_source_root) in command
+    assert str(python_sdk_root) in command
     assert artifact.binary_path.name == "aclip-demo-notes.exe"
+
+
+def test_inspect_app_factory_exposes_module_file():
+    info = inspect_app_factory("aclip_demo_notes.app:create_app")
+
+    assert info.target == "aclip_demo_notes.app:create_app"
+    assert info.module_file.name == "app.py"
 
 
 def test_repository_layout_places_python_sdk_under_sdk_directory():
@@ -109,27 +117,27 @@ def test_repository_layout_places_python_sdk_under_sdk_directory():
     assert (root / "examples" / "demo-notes" / "src" / "aclip_demo_notes").exists()
 
 
-def test_package_cli_help_is_available():
+def test_python_sdk_does_not_declare_a_build_cli_console_script():
     root = Path(__file__).resolve().parents[1]
-    pythonpath = str(root / "src") + ";" + str(root / "examples" / "demo-notes" / "src")
-    result = subprocess.run(
-        [sys.executable, "-m", "aclip.build_cli_cli", "--help"],
-        capture_output=True,
-        text=True,
-        check=False,
-        env={
-            **os.environ,
-            "PYTHONPATH": (
-                pythonpath
-                if "PYTHONPATH" not in os.environ
-                else pythonpath + ";" + os.environ["PYTHONPATH"]
-            ),
-        },
-    )
+    pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
 
-    assert result.returncode == 0
-    assert "--app-factory" in result.stdout
-    assert "aclip-build-cli" in result.stdout
+    assert "scripts" not in pyproject["project"]
+
+
+def test_cli_main_uses_default_argv(capsys):
+    app = create_app()
+    original_argv = sys.argv
+    sys.argv = ["aclip-demo-notes", "note", "list"]
+    try:
+        try:
+            cli_main(app)
+        except SystemExit as exc:
+            assert exc.code == 0
+    finally:
+        sys.argv = original_argv
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "note list"
 
 
 def test_distribution_spec_can_emit_npm_package_manifest():
@@ -145,4 +153,8 @@ def test_distribution_spec_can_emit_npm_package_manifest():
         "version": "0.1.0",
         "executable": "aclip-demo-notes",
     }
+
+
+def test_sdk_exposes_build_cli_only_as_a_module_level_api():
+    assert not hasattr(AclipApp, "build_cli")
 

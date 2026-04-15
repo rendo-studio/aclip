@@ -266,34 +266,6 @@ class AclipApp:
         self._refresh_compiled_tree()
         return CommandGroupBuilder(self, group)
 
-    def build_cli(
-        self,
-        *,
-        entry_script: Any,
-        project_root: Any,
-        source_root: Any | None = None,
-        extra_paths: list[Any] | None = None,
-        executable_name: str | None = None,
-        dist_dir: Any | None = None,
-        build_dir: Any | None = None,
-        runner: Any | None = None,
-        platform_value: str | None = None,
-    ):
-        from .packaging import build_cli
-
-        return build_cli(
-            app=self,
-            entry_script=entry_script,
-            project_root=project_root,
-            source_root=source_root,
-            extra_paths=extra_paths,
-            executable_name=executable_name,
-            dist_dir=dist_dir,
-            build_dir=build_dir,
-            runner=runner,
-            platform_value=platform_value,
-        )
-
     def _find_command(self, path_parts: list[str]) -> CommandSpec:
         path = tuple(path_parts)
         for command in self.commands:

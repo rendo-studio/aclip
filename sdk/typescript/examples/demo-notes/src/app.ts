@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
-import { AclipApp } from "../../../src/app.js";
-import { stringArgument } from "../../../src/contracts.js";
+import { AclipApp } from "../../../src/app";
+import { stringArgument } from "../../../src/contracts";
 
 interface NoteRecord {
   title: string;

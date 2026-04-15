@@ -1,13 +1,10 @@
 {
   "name": "@rendo-studio/aclip",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "type": "module",
   "license": "MIT",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "bin": {
-    "aclip-build-cli": "dist/buildCliCli.cjs"
-  },
   "files": [
     "dist",
     "README.md",
@@ -31,12 +28,12 @@
   },
   "dependencies": {
     "commander": "^14.0.3",
-    "tsup": "^8.5.1"
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
     "ajv": "^8.18.0",
-    "tsx": "^4.21.0",
     "typescript": "^6.0.2",
     "vitest": "^4.1.4"
   }

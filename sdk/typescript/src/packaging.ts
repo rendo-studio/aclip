@@ -1,6 +1,9 @@
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { basename, dirname, extname, relative, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import type { AclipApp } from "./app.js";
 
@@ -11,31 +14,24 @@ export interface CliArtifact {
 }
 
 export interface BuildCliOptions {
-  app: AclipApp;
-  executableName: string;
-  packageName: string;
-  packageVersion: string;
-  entryFile: string;
-  projectRoot: string;
+  appFactory: string;
+  projectRoot?: string;
   outDir?: string;
+  executableName?: string;
+  packageName?: string;
+  packageVersion?: string;
 }
 
-/** @deprecated Use CliArtifact instead. */
-export type NodeCliArtifact = CliArtifact;
-/** @deprecated Use BuildCliOptions instead. */
-export type PackageNodeCliOptions = BuildCliOptions;
+interface AppFactoryInfo {
+  target: string;
+  modulePath: string;
+  exportName: string;
+}
 
 export async function loadAppFactory(target: string): Promise<() => AclipApp> {
-  const separator = target.lastIndexOf(":");
-  if (separator <= 0) {
-    throw new Error("app factory must use the form '<module-path>:<export-name>'");
-  }
-
-  const modulePath = target.slice(0, separator);
-  const exportName = target.slice(separator + 1);
-  const moduleUrl = pathToFileURL(resolve(modulePath)).href;
-  const importedModule = (await import(moduleUrl)) as Record<string, unknown>;
-  const factory = importedModule[exportName];
+  const info = inspectAppFactoryTarget(target);
+  const importedModule = await loadFactoryModule(info.modulePath);
+  const factory = importedModule[info.exportName];
 
   if (typeof factory !== "function") {
     throw new Error("app factory target must resolve to a callable export");
@@ -44,58 +40,34 @@ export async function loadAppFactory(target: string): Promise<() => AclipApp> {
   return factory as () => AclipApp;
 }
 
-/**
- * @deprecated Use build_cli() instead.
- */
-export async function packageNodeCli(options: PackageNodeCliOptions): Promise<CliArtifact> {
-  return build_cli({
-    app: options.app,
-    executableName: options.executableName,
-    packageName: options.packageName,
-    packageVersion: options.packageVersion,
-    entryFile: options.entryFile,
-    projectRoot: options.projectRoot,
-    outDir: options.outDir
-  });
-}
-
-export async function build_cli(
-  options: {
-    app: AclipApp;
-    entryFile: string;
-    projectRoot: string;
-    outDir?: string;
-    executableName?: string;
-    packageName?: string;
-    packageVersion?: string;
-  }
-): Promise<CliArtifact> {
-  const { build } = await import("tsup");
-  const outDir = options.outDir ?? resolve(options.projectRoot, "dist");
-  mkdirSync(outDir, { recursive: true });
-  const packageMetadata = readPackageMetadata(options.projectRoot);
-  const executableName = options.executableName ?? options.app.name;
+export async function build_cli(options: BuildCliOptions): Promise<CliArtifact> {
+  const factoryInfo = inspectAppFactoryTarget(options.appFactory, options.projectRoot);
+  const projectRoot = resolveProjectRoot(factoryInfo.modulePath, options.projectRoot);
+  const app = (await loadAppFactory(factoryInfo.target))();
+  const outDir = options.outDir ?? resolve(projectRoot, "dist");
+  const tempDir = resolve(projectRoot, ".aclip-build", randomUUID());
+  const launcherFile = writeLauncherFile(tempDir, factoryInfo, defaultSdkImportSpecifier());
+  const launcherEntry = relativeImportPath(projectRoot, launcherFile);
+  const packageMetadata = readPackageMetadata(projectRoot);
+  const executableName = options.executableName ?? app.name;
   const packageName = options.packageName ?? packageMetadata.name;
   const packageVersion = options.packageVersion ?? packageMetadata.version;
-
-  await build({
-    entry: {
-      [executableName]: options.entryFile
-    },
+  const tsupConfigFile = writeTsupConfigFile(tempDir, {
+    executableName,
+    launcherEntry,
     outDir,
-    format: ["cjs"],
-    platform: "node",
-    target: "node22",
-    clean: true,
-    dts: false,
-    sourcemap: false,
-    silent: true,
-    splitting: false,
-    noExternal: ["commander"],
-    banner: {
-      js: "#!/usr/bin/env node"
-    }
   });
+
+  mkdirSync(outDir, { recursive: true });
+
+  try {
+    runTsupBuild({
+      projectRoot,
+      tsupConfigFile,
+    });
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
 
   const entryPath = resolve(outDir, `${executableName}.cjs`);
   try {
@@ -104,7 +76,7 @@ export async function build_cli(
     // chmod is best-effort on Windows
   }
 
-  const manifest = options.app.buildIndexManifest({
+  const manifest = app.buildIndexManifest({
     binaryName: executableName,
     distribution: [
       {
@@ -125,6 +97,92 @@ export async function build_cli(
   };
 }
 
+function inspectAppFactoryTarget(target: string, projectRoot?: string): AppFactoryInfo {
+  const separator = target.lastIndexOf(":");
+  if (separator <= 0) {
+    throw new Error("app factory must use the form '<module-path>:<export-name>'");
+  }
+
+  const modulePath = target.slice(0, separator);
+  const exportName = target.slice(separator + 1);
+  const resolvedModulePath = resolve(
+    projectRoot ?? process.cwd(),
+    modulePath
+  );
+
+  return {
+    target: `${resolvedModulePath}:${exportName}`,
+    modulePath: resolvedModulePath,
+    exportName
+  };
+}
+
+function resolveProjectRoot(modulePath: string, explicitProjectRoot?: string): string {
+  if (explicitProjectRoot) {
+    return resolve(explicitProjectRoot);
+  }
+
+  let current = dirname(modulePath);
+  while (true) {
+    if (basename(current) === "src") {
+      return dirname(current);
+    }
+    try {
+      readFileSync(resolve(current, "package.json"), "utf8");
+      return current;
+    } catch {
+      const parent = dirname(current);
+      if (parent === current) {
+        return dirname(modulePath);
+      }
+      current = parent;
+    }
+  }
+}
+
+function writeLauncherFile(
+  tempDir: string,
+  factoryInfo: AppFactoryInfo,
+  sdkImportSpecifier: string
+): string {
+  mkdirSync(tempDir, { recursive: true });
+  const relativeModulePath = relativeImportPath(tempDir, factoryInfo.modulePath);
+  const resolvedSdkImportSpecifier = normalizeImportSpecifier(tempDir, sdkImportSpecifier);
+  const importLine =
+    factoryInfo.exportName === "default"
+      ? `import createApp from ${JSON.stringify(relativeModulePath)};`
+      : `import { ${factoryInfo.exportName} as createApp } from ${JSON.stringify(relativeModulePath)};`;
+
+  const launcherPath = resolve(tempDir, "buildCliLauncher.ts");
+  writeFileSync(
+    launcherPath,
+    [
+      `import { cliMain } from ${JSON.stringify(resolvedSdkImportSpecifier)};`,
+      importLine,
+      "",
+      "void cliMain(createApp);",
+      ""
+    ].join("\n"),
+    "utf8"
+  );
+  return launcherPath;
+}
+
+function relativeImportPath(fromDir: string, targetPath: string): string {
+  const normalized = relative(fromDir, targetPath).replaceAll("\\", "/");
+  if (normalized.startsWith("../") || normalized.startsWith("./")) {
+    return normalized;
+  }
+  return `./${normalized}`;
+}
+
+function normalizeImportSpecifier(fromDir: string, specifier: string): string {
+  if (specifier.startsWith(".") || specifier.startsWith("/") || /^[A-Za-z]:/.test(specifier)) {
+    return relativeImportPath(fromDir, resolve(specifier));
+  }
+  return specifier;
+}
+
 function readPackageMetadata(projectRoot: string): { name: string; version: string } {
   const packageJsonPath = resolve(projectRoot, "package.json");
   const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
@@ -138,4 +196,81 @@ function readPackageMetadata(projectRoot: string): { name: string; version: stri
     name: packageJson.name,
     version: packageJson.version
   };
+}
+
+function defaultSdkImportSpecifier(): string {
+  const currentFile = fileURLToPath(import.meta.url);
+  const indexFile = currentFile.endsWith(".ts") ? "index.ts" : "index.js";
+  return resolve(dirname(currentFile), indexFile);
+}
+
+async function loadFactoryModule(modulePath: string): Promise<Record<string, unknown>> {
+  const extension = extname(modulePath);
+  if (extension === ".ts" || extension === ".mts" || extension === ".cts") {
+    const { tsImport } = await import("tsx/esm/api");
+    return (await tsImport(pathToFileURL(modulePath).href, import.meta.url)) as Record<string, unknown>;
+  }
+
+  return (await import(pathToFileURL(modulePath).href)) as Record<string, unknown>;
+}
+
+function runTsupBuild(options: {
+  projectRoot: string;
+  tsupConfigFile: string;
+}): void {
+  const require = createRequire(import.meta.url);
+  const tsupCliPath = require.resolve("tsup/dist/cli-default.js");
+  const result = spawnSync(
+    process.execPath,
+    [
+      tsupCliPath,
+      "--config",
+      options.tsupConfigFile,
+    ],
+    {
+      cwd: options.projectRoot,
+      encoding: "utf8",
+    },
+  );
+
+  if (result.status !== 0) {
+    throw new Error(
+      result.stderr.trim() || result.stdout.trim() || "tsup build failed",
+    );
+  }
+}
+
+function writeTsupConfigFile(
+  tempDir: string,
+  options: {
+    executableName: string;
+    launcherEntry: string;
+    outDir: string;
+  },
+): string {
+  const configPath = resolve(tempDir, "tsup.build.config.ts");
+  writeFileSync(
+    configPath,
+    [
+      'import { defineConfig } from "tsup";',
+      "",
+      "export default defineConfig({",
+      `  entry: { ${JSON.stringify(options.executableName)}: ${JSON.stringify(options.launcherEntry)} },`,
+      `  outDir: ${JSON.stringify(options.outDir)},`,
+      '  format: ["cjs"],',
+      '  platform: "node",',
+      '  target: "node22",',
+      "  clean: true,",
+      "  dts: false,",
+      "  sourcemap: false,",
+      "  silent: true,",
+      "  splitting: false,",
+      '  noExternal: ["commander"],',
+      '  banner: { js: "#!/usr/bin/env node" },',
+      "});",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  return configPath;
 }

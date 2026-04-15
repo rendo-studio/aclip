@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import sys
-
-from aclip_demo_notes.app import create_app
+from aclip import cli_main
 
 
 def main() -> None:
-    raise SystemExit(create_app().run(sys.argv[1:]))
+    cli_main("aclip_demo_notes.app:create_app")
 
 
 if __name__ == "__main__":
