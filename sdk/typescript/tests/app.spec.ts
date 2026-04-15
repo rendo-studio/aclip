@@ -252,4 +252,25 @@ describe("AclipApp", () => {
 
     expect(JSON.parse(writes.join("")).command).toBe("note list");
   });
+
+  test("cliMain accepts a string app target", async () => {
+    const originalArgv = process.argv;
+    const writes: string[] = [];
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(((chunk: string | Uint8Array) => {
+      writes.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write);
+    const appTarget = `${resolve(fileURLToPath(new URL(".", import.meta.url)), "..", "examples", "demo-notes", "src", "app.ts")}:app`;
+
+    process.argv = ["node", "demo", "note", "list"];
+    try {
+      const exitCode = await cliMain(appTarget, undefined);
+      expect(exitCode).toBe(0);
+    } finally {
+      stdoutSpy.mockRestore();
+      process.argv = originalArgv;
+    }
+
+    expect(JSON.parse(writes.join("")).command).toBe("note list");
+  });
 });

@@ -54,7 +54,7 @@ describe("build_cli", () => {
       {
         kind: "npm_package",
         package: "@rendo-studio/aclip",
-        version: "0.2.1",
+        version: "0.2.2",
         executable: "aclip-demo-notes"
       }
     ]);
@@ -73,7 +73,7 @@ describe("build_cli", () => {
   test("SDK exposes build_cli only as a module-level API", () => {
     const app = new AclipApp({
       name: "notes",
-      version: "0.2.1",
+      version: "0.2.2",
       summary: "A minimal notes CLI.",
       description: "Create and inspect notes."
     });

@@ -3,9 +3,14 @@ import type { AclipApp } from "./app.js";
 export type CliAppTarget =
   | AclipApp
   | (() => AclipApp)
-  | (() => Promise<AclipApp>);
+  | (() => Promise<AclipApp>)
+  | string;
 
 export async function resolveApp(target: CliAppTarget): Promise<AclipApp> {
+  if (typeof target === "string") {
+    const { loadAppTarget } = await import("./packaging.js");
+    return loadAppTarget(target);
+  }
   if (typeof target === "function") {
     return await target();
   }

@@ -43,7 +43,7 @@ from aclip import AclipApp
 def create_app() -> AclipApp:
     app = AclipApp(
         name="notes",
-        version="0.2.1",
+        version="0.2.2",
         summary="A minimal notes CLI.",
         description="Create and list notes from a small local CLI.",
     )

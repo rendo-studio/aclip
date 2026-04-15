@@ -25,7 +25,7 @@ import { AclipApp, stringArgument } from "@rendo-studio/aclip";
 export function createApp() {
   const app = new AclipApp({
     name: "notes",
-    version: "0.2.1",
+    version: "0.2.2",
     summary: "A minimal notes CLI.",
     description: "Create and list notes from a small local CLI."
   });
