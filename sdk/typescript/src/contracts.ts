@@ -1,4 +1,5 @@
 export type ArgumentKind = "string" | "integer" | "boolean";
+export type CredentialSource = "env" | "file";
 
 export interface PathSummary {
   path: string;
@@ -24,10 +25,11 @@ export type ArgumentOptions = Omit<ArgumentSpec, "name" | "kind" | "description"
 
 export interface CredentialSpec {
   name: string;
-  source: string;
+  source: CredentialSource;
   required: boolean;
   description: string;
   envVar?: string;
+  path?: string;
 }
 
 export interface StandaloneBinaryDistributionSpec {
@@ -74,6 +76,19 @@ export interface AppOptions {
   commands?: CommandSpec[];
   commandGroups?: CommandGroupSpec[];
   credentials?: CredentialSpec[];
+}
+
+export interface CredentialOptions {
+  description: string;
+  required?: boolean;
+}
+
+export interface EnvCredentialOptions extends CredentialOptions {
+  envVar: string;
+}
+
+export interface FileCredentialOptions extends CredentialOptions {
+  path: string;
 }
 
 export interface CommandRegistration {
@@ -162,9 +177,34 @@ export function argumentToManifest(argument: ArgumentSpec): Record<string, unkno
 }
 
 export function credentialToManifest(credential: CredentialSpec): Record<string, unknown> {
-  return credential.envVar
-    ? { ...credential, envVar: credential.envVar }
+  assertValidCredentialSpec(credential);
+  return credential.envVar || credential.path
+    ? {
+        ...credential,
+        ...(credential.envVar ? { envVar: credential.envVar } : {}),
+        ...(credential.path ? { path: credential.path } : {})
+      }
     : { ...credential };
+}
+
+export function envCredential(name: string, options: EnvCredentialOptions): CredentialSpec {
+  return {
+    name,
+    source: "env",
+    envVar: options.envVar,
+    description: options.description,
+    required: options.required ?? false
+  };
+}
+
+export function fileCredential(name: string, options: FileCredentialOptions): CredentialSpec {
+  return {
+    name,
+    source: "file",
+    path: options.path,
+    description: options.description,
+    required: options.required ?? false
+  };
 }
 
 export function distributionToManifest(distribution: DistributionSpec): Record<string, unknown> {
@@ -239,4 +279,22 @@ export function createCommandSpec(
 function humanizeName(name: string): string {
   const normalized = name.replaceAll("_", " ").replaceAll("-", " ");
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+function assertValidCredentialSpec(credential: CredentialSpec): void {
+  if (credential.source !== "env" && credential.source !== "file") {
+    throw new Error("credential source must be 'env' or 'file'");
+  }
+  if (credential.source === "env" && !credential.envVar) {
+    throw new Error("env credentials require envVar");
+  }
+  if (credential.source === "file" && !credential.path) {
+    throw new Error("file credentials require path");
+  }
+  if (credential.source === "env" && credential.path !== undefined) {
+    throw new Error("env credentials cannot declare path");
+  }
+  if (credential.source === "file" && credential.envVar !== undefined) {
+    throw new Error("file credentials cannot declare envVar");
+  }
 }

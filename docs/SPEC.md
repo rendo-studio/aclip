@@ -10,6 +10,7 @@ It covers:
 - progressive disclosure
 - structured runtime envelopes
 - credential declaration
+- minimum auth contract
 - distribution metadata reservation
 - machine-readable canonical contracts
 
@@ -135,6 +136,7 @@ Each slot declares:
 Current minimal supported source:
 
 - `env`
+- `file`
 
 Example:
 
@@ -147,6 +149,40 @@ Example:
   "description": "optional API token for future remote sync"
 }
 ```
+
+File-based credential declarations are also core:
+
+```json
+{
+  "name": "notes_token_file",
+  "source": "file",
+  "path": ".secrets/notes-token.txt",
+  "required": false,
+  "description": "optional local token file for remote sync"
+}
+```
+
+### 2.8 Auth standard
+
+ACLIP reserves a small portable auth vocabulary.
+
+Current auth-related reserved error codes:
+
+- `auth_required`
+- `invalid_credential`
+- `expired_credential`
+
+ACLIP may also expose an optional reserved top-level `auth` command group when a product needs explicit auth lifecycle commands.
+
+Current recommended baseline:
+
+- `auth login`
+- `auth status`
+- `auth logout`
+
+These commands are optional and author-owned.
+
+ACLIP standardizes the surface shape, not provider-specific implementations.
 
 ### 2.7 Distribution reservation
 

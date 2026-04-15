@@ -6,6 +6,12 @@ export interface ResultEnvelope {
   data: Record<string, unknown>;
 }
 
+export const AUTH_ERROR_CODES = [
+  "auth_required",
+  "invalid_credential",
+  "expired_credential"
+] as const;
+
 export interface ErrorEnvelope {
   protocol: "aclip/0.1";
   type: "error";

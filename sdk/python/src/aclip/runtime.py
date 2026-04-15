@@ -3,6 +3,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
+AUTH_ERROR_CODES = {
+    "auth_required",
+    "invalid_credential",
+    "expired_credential",
+}
+
 
 def encode_json(payload: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=True, sort_keys=True)

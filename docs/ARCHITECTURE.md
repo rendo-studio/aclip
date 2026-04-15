@@ -40,6 +40,7 @@ Their job is:
 - let authors declare command groups, commands, arguments, and examples
 - let authors declare nested command trees while compiling them to flat runtime paths
 - let authors use decorator-based authoring on top of the same command contracts
+- let authors attach portable credential declarations and optional auth control-plane skeletons
 - reserve `--help` and `<command> --help` for protocol disclosure
 - render canonical Markdown help from structured help data
 - emit ACLIP result and error envelopes

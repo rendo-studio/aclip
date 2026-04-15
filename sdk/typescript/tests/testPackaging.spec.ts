@@ -6,7 +6,15 @@ import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020";
 import { describe, expect, test } from "vitest";
 
-import { AclipApp, build, build_cli, loadAppFactory } from "../src/index.js";
+import {
+  AclipApp,
+  build,
+  build_cli,
+  credentialToManifest,
+  envCredential,
+  fileCredential,
+  loadAppFactory
+} from "../src/index.js";
 
 function currentDir() {
   return fileURLToPath(new URL(".", import.meta.url));
@@ -54,7 +62,7 @@ describe("build_cli", () => {
       {
         kind: "npm_package",
         package: "@rendo-studio/aclip",
-        version: "0.2.3",
+        version: "0.2.4",
         executable: "aclip-demo-notes"
       }
     ]);
@@ -73,7 +81,7 @@ describe("build_cli", () => {
   test("SDK exposes build_cli only as a module-level API", () => {
     const app = new AclipApp({
       name: "notes",
-      version: "0.2.3",
+      version: "0.2.4",
       summary: "A minimal notes CLI.",
       description: "Create and inspect notes."
     });
@@ -83,5 +91,38 @@ describe("build_cli", () => {
 
   test("exports build as an alias of build_cli", () => {
     expect(build).toBe(build_cli);
+  });
+
+  test("credential manifests support env and file sources", () => {
+    expect(
+      credentialToManifest(
+        envCredential("notes_token", {
+          envVar: "ACLIP_NOTES_TOKEN",
+          description: "Token for remote notes access.",
+          required: true
+        })
+      )
+    ).toEqual({
+      name: "notes_token",
+      source: "env",
+      envVar: "ACLIP_NOTES_TOKEN",
+      description: "Token for remote notes access.",
+      required: true
+    });
+
+    expect(
+      credentialToManifest(
+        fileCredential("notes_token_file", {
+          path: ".secrets/notes-token.txt",
+          description: "Path to a local token file."
+        })
+      )
+    ).toEqual({
+      name: "notes_token_file",
+      source: "file",
+      path: ".secrets/notes-token.txt",
+      description: "Path to a local token file.",
+      required: false
+    });
   });
 });

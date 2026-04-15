@@ -7,7 +7,17 @@ from pathlib import Path
 from jsonschema import validate
 
 from aclip_demo_notes.app import create_app
-from aclip import AclipApp, DistributionSpec, build, cli_main, run_cli
+from aclip import (
+    AclipApp,
+    AUTH_ERROR_CODES,
+    AuthCommandConfig,
+    CredentialSpec,
+    DistributionSpec,
+    build,
+    build_auth_control_plane,
+    cli_main,
+    run_cli,
+)
 from aclip.packaging import build_cli, inspect_app_factory, load_app_factory, load_app_target
 from aclip.schema import load_schema
 
@@ -190,4 +200,77 @@ def test_load_app_target_supports_app_instance_exports():
 
 def test_run_cli_alias_points_to_cli_main():
     assert run_cli is cli_main
+
+
+def test_credential_spec_supports_env_and_file_sources():
+    env_credential = CredentialSpec.env(
+        name="notes_token",
+        env_var="ACLIP_NOTES_TOKEN",
+        description="Token for remote notes access.",
+        required=True,
+    )
+    file_credential = CredentialSpec.file(
+        name="notes_token_file",
+        path=".secrets/notes-token.txt",
+        description="Path to a local token file.",
+    )
+
+    assert env_credential.to_manifest() == {
+        "name": "notes_token",
+        "source": "env",
+        "required": True,
+        "description": "Token for remote notes access.",
+        "envVar": "ACLIP_NOTES_TOKEN",
+    }
+    assert file_credential.to_manifest() == {
+        "name": "notes_token_file",
+        "source": "file",
+        "required": False,
+        "description": "Path to a local token file.",
+        "path": ".secrets/notes-token.txt",
+    }
+
+
+def test_invalid_credential_source_shape_raises_value_error():
+    try:
+        CredentialSpec(
+            name="broken",
+            source="env",
+            description="Broken credential shape.",
+        )
+    except ValueError as exc:
+        assert "envVar" in str(exc)
+    else:
+        raise AssertionError("expected CredentialSpec to reject env credentials without env_var")
+
+
+def test_auth_error_codes_are_exported():
+    assert AUTH_ERROR_CODES == {
+        "auth_required",
+        "invalid_credential",
+        "expired_credential",
+    }
+
+
+def test_build_auth_control_plane_provides_reserved_auth_group():
+    control_plane = build_auth_control_plane(
+        AuthCommandConfig(
+            login_description="Login to the author-defined remote service.",
+            login_examples=["notes auth login"],
+            login_handler=lambda _payload: {"status": "logged_in"},
+            status_description="Inspect current auth state.",
+            status_examples=["notes auth status"],
+            status_handler=lambda _payload: {"status": "active"},
+            logout_description="Logout from the author-defined remote service.",
+            logout_examples=["notes auth logout"],
+            logout_handler=lambda _payload: {"status": "logged_out"},
+        )
+    )
+
+    assert control_plane.command_group.path == ("auth",)
+    assert [command.path for command in control_plane.commands] == [
+        ("auth", "login"),
+        ("auth", "status"),
+        ("auth", "logout"),
+    ]
 

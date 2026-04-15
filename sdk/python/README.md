@@ -43,7 +43,7 @@ from aclip import AclipApp
 def create_app() -> AclipApp:
     app = AclipApp(
         name="notes",
-        version="0.2.3",
+        version="0.2.4",
         summary="A minimal notes CLI.",
         description="Create and list notes from a small local CLI.",
     )
@@ -141,6 +141,43 @@ artifact = aclip.build(create_app)
 ```
 
 If you want the fully explicit name, `build_cli(...)` is the same API.
+
+## Authentication
+
+ACLIP now standardizes a minimum auth contract around portable credential declarations and an optional reserved `auth` control plane.
+
+```python
+from aclip import AuthCommandConfig, CredentialSpec, build_auth_control_plane
+
+
+credentials = [
+    CredentialSpec.env(
+        name="notes_token",
+        env_var="ACLIP_NOTES_TOKEN",
+        description="Remote notes API token.",
+        required=True,
+    ),
+    CredentialSpec.file(
+        name="notes_token_file",
+        path=".secrets/notes-token.txt",
+        description="Optional local token file.",
+    ),
+]
+
+auth = build_auth_control_plane(
+    AuthCommandConfig(
+        login_description="Login to the author-defined remote service.",
+        login_examples=["notes auth login"],
+        login_handler=lambda _payload: {"status": "logged_in"},
+        status_description="Inspect current auth state.",
+        status_examples=["notes auth status"],
+        status_handler=lambda _payload: {"status": "active"},
+        logout_description="Logout from the author-defined remote service.",
+        logout_examples=["notes auth logout"],
+        logout_handler=lambda _payload: {"status": "logged_out"},
+    )
+)
+```
 
 In a conventional project layout, ACLIP infers:
 

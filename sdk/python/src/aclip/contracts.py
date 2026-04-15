@@ -55,6 +55,53 @@ class CredentialSpec:
     description: str
     required: bool = False
     env_var: str | None = None
+    path: str | None = None
+
+    @classmethod
+    def env(
+        cls,
+        *,
+        name: str,
+        env_var: str,
+        description: str,
+        required: bool = False,
+    ) -> "CredentialSpec":
+        return cls(
+            name=name,
+            source="env",
+            description=description,
+            required=required,
+            env_var=env_var,
+        )
+
+    @classmethod
+    def file(
+        cls,
+        *,
+        name: str,
+        path: str,
+        description: str,
+        required: bool = False,
+    ) -> "CredentialSpec":
+        return cls(
+            name=name,
+            source="file",
+            description=description,
+            required=required,
+            path=path,
+        )
+
+    def __post_init__(self) -> None:
+        if self.source not in {"env", "file"}:
+            raise ValueError("credential source must be 'env' or 'file'")
+        if self.source == "env" and not self.env_var:
+            raise ValueError("env credentials require envVar")
+        if self.source == "file" and not self.path:
+            raise ValueError("file credentials require path")
+        if self.source == "env" and self.path is not None:
+            raise ValueError("env credentials cannot declare path")
+        if self.source == "file" and self.env_var is not None:
+            raise ValueError("file credentials cannot declare envVar")
 
     def to_manifest(self) -> dict[str, Any]:
         payload = {
@@ -65,6 +112,8 @@ class CredentialSpec:
         }
         if self.env_var:
             payload["envVar"] = self.env_var
+        if self.path:
+            payload["path"] = self.path
         return payload
 
 

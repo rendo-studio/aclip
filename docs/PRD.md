@@ -114,6 +114,8 @@ This PRD is grounded in the ecosystem signals that matter most to the problem.
 - [HKUDS/CLI-Anything](https://github.com/HKUDS/CLI-Anything)
 - [knowsuchagency/mcp2cli](https://github.com/knowsuchagency/mcp2cli)
 - [@lifeprompt/acli](https://www.npmjs.com/package/@lifeprompt/acli)
+- [FFmpeg documentation](https://ffmpeg.org/ffmpeg.html)
+- [FFprobe documentation](https://ffmpeg.org/ffprobe-all.html)
 
 ### What these projects show
 
@@ -121,6 +123,7 @@ This PRD is grounded in the ecosystem signals that matter most to the problem.
 - CLI-Anything proves demand for agent-usable CLIs, but mainly solves wrapper generation and distribution around existing software.
 - `@lifeprompt/acli` proves there is appetite for CLI-shaped agent interaction and compact discovery, but it remains an MCP command gateway rather than a standalone CLI standard.
 - OpenCLI and `mcp2cli` prove demand for adapters, bridges, and import surfaces, but not a stable contract for newly built agent-native CLIs.
+- FFmpeg and FFprobe prove that very large CLI surfaces need typed introspection, layered help depth, and machine-readable diagnostics, but they also show how quickly global flag sprawl becomes hostile to both humans and agents if it is not constrained.
 
 ## 6. Q&A tracker
 
@@ -215,19 +218,60 @@ Rules:
   **A:** Yes. This is one of the most important next core directions.
   **How this was answered:** We concluded that ACLIP should standardize auth contracts at the protocol level: credential slot semantics, auth-related error codes, and a recommended `auth` control surface. Full provider-specific flows are later work.
 
+- [x] **Q: When should auth standardization happen?**
+  **A:** Immediately in the next core design milestone, before `acli` and `aclim`.
+  **How this was answered:** VPD review now treats auth as both a current pain and a deterministic dependency for downstream layers. Deferring it would force local conventions into later products. The iteration order is now recorded in [VPD-NEXT-ITERATION-DECISIONS.md](D:/project/rendo/aclip/docs/VPD-NEXT-ITERATION-DECISIONS.md).
+
 - [x] **Q: Should ACLIP expose a default `help` command alias and `--all` expansion?**
   **A:** Yes, but only as a lightweight extension. `help` can be an alias to the canonical `--help` behavior, and `--all` can expand the current subtree. We should not invent a paging protocol now.
   **How this was answered:** We concluded that `help` alias plus `--all` improves weaker-agent usability, while paging introduces unnecessary state and protocol weight.
 
+- [x] **Q: Should ACLIP standardize `doctor` and richer remediation errors?**
+  **A:** Yes, but they land at different layers. Richer remediation fields belong in the core error contract sooner. `doctor` belongs as an optional reserved control plane, not as a mandatory core command for every CLI.
+  **How this was answered:** VPD review found that environment diagnosis and remediation are recurring real pains across agent-facing CLIs, while a mandatory `doctor` command would be unnecessary overhead for smaller tools. The current direction is recorded in [VPD-NEXT-ITERATION-DECISIONS.md](D:/project/rendo/aclip/docs/VPD-NEXT-ITERATION-DECISIONS.md).
+
+- [x] **Q: Should ACLIP provide a hook for named agent skills or workflows?**
+  **A:** Yes, but as optional metadata or export-layer hooks, not as core runtime command semantics.
+  **How this was answered:** We concluded that complex workflows need reusable task-oriented guidance, but that guidance should remain an extension surface that can feed skill export and agent packaging rather than polluting command execution semantics.
+
+- [x] **Q: Should ACLIP absorb lessons from FFmpeg, CLI-Anything plugin, OpenCLI, and `mcp2cli`?**
+  **A:** Yes, selectively.
+  **How this was answered:** The next-iteration VPD review concluded that ACLIP should absorb layered help, typed introspection, machine-readable diagnostics, optional diagnostic control planes, skill/export methodology, and auth/discovery lessons. It should not absorb live browser runtimes, REPL/session mechanics, heavy auto-generation pipelines, or ranking systems into core. See [VPD-NEXT-ITERATION-DECISIONS.md](D:/project/rendo/aclip/docs/VPD-NEXT-ITERATION-DECISIONS.md).
+
 ### 6.4 Open questions that remain unresolved
 
 - [ ] **Q: What is the minimum ACLIP auth standard for the next milestone?**
+  **A:** Solved.
+  The minimum auth standard is now:
+  - core credential sources: `env` and `file`
+  - reserved portable auth error codes: `auth_required`, `invalid_credential`, `expired_credential`
+  - optional reserved `auth` control plane with `auth login`, `auth status`, and `auth logout`
+  - detailed credential declarations in the sidecar manifest, not dumped into runtime help by default
+  **How this was completed:** The contract is now written into [AUTH-STANDARD.md](D:/project/rendo/aclip/docs/AUTH-STANDARD.md) and [SPEC.md](D:/project/rendo/aclip/docs/SPEC.md), with matching SDK implementations in [sdk/python/src/aclip](D:/project/rendo/aclip/sdk/python/src/aclip) and [sdk/typescript/src](D:/project/rendo/aclip/sdk/typescript/src).
+
+- [ ] **Q: What is the minimum richer error contract for the next milestone?**
   **A:** Not solved yet.
   The next pass should answer:
-  - which credential sources are core
-  - whether `auth` becomes a reserved command group
-  - which auth error codes are mandatory
-  - what belongs in runtime help versus sidecar metadata
+  - which extra error fields are core versus optional
+  - whether retryability is standardized
+  - how remediation hints are represented
+  - which codes are reserved versus author-defined
+
+- [ ] **Q: What is the minimum `doctor` control plane shape?**
+  **A:** Not solved yet.
+  The next pass should answer:
+  - whether `doctor` is a reserved top-level command or command group
+  - what result payload shape it uses
+  - whether checks are categorized
+  - which exit-code and error interactions are required
+
+- [ ] **Q: What is the minimum metadata shape for named agent skills or workflows?**
+  **A:** Not solved yet.
+  The next pass should answer:
+  - whether the hook is called `skills`, `workflows`, or another name
+  - what fields are mandatory
+  - whether it lives in the manifest, a sidecar companion, or export-only tooling
+  - how it maps to future skill export targets
 
 - [ ] **Q: What is the exact export format for skill generation?**
   **A:** Not solved yet.

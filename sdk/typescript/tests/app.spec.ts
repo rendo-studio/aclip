@@ -7,8 +7,12 @@ import { describe, expect, test, vi } from "vitest";
 
 import {
   AclipApp,
+  AUTH_ERROR_CODES,
+  buildAuthControlPlane,
   booleanArgument,
   cliMain,
+  envCredential,
+  fileCredential,
   integerArgument,
   runCli,
   renderHelpMarkdown,
@@ -277,5 +281,63 @@ describe("AclipApp", () => {
 
   test("runCli aliases cliMain", () => {
     expect(runCli).toBe(cliMain);
+  });
+
+  test("credential helpers support env and file sources", () => {
+    expect(
+      envCredential("notes_token", {
+        envVar: "ACLIP_NOTES_TOKEN",
+        description: "Token for remote notes access.",
+        required: true
+      })
+    ).toEqual({
+      name: "notes_token",
+      source: "env",
+      envVar: "ACLIP_NOTES_TOKEN",
+      description: "Token for remote notes access.",
+      required: true
+    });
+
+    expect(
+      fileCredential("notes_token_file", {
+        path: ".secrets/notes-token.txt",
+        description: "Path to a local token file."
+      })
+    ).toEqual({
+      name: "notes_token_file",
+      source: "file",
+      path: ".secrets/notes-token.txt",
+      description: "Path to a local token file.",
+      required: false
+    });
+  });
+
+  test("auth error codes are exported", () => {
+    expect(AUTH_ERROR_CODES).toEqual([
+      "auth_required",
+      "invalid_credential",
+      "expired_credential"
+    ]);
+  });
+
+  test("buildAuthControlPlane provides the reserved auth group", () => {
+    const controlPlane = buildAuthControlPlane({
+      loginDescription: "Login to the author-defined remote service.",
+      loginExamples: ["notes auth login"],
+      loginHandler: async () => ({ status: "logged_in" }),
+      statusDescription: "Inspect current auth state.",
+      statusExamples: ["notes auth status"],
+      statusHandler: async () => ({ status: "active" }),
+      logoutDescription: "Logout from the author-defined remote service.",
+      logoutExamples: ["notes auth logout"],
+      logoutHandler: async () => ({ status: "logged_out" })
+    });
+
+    expect(controlPlane.commandGroup.path).toEqual(["auth"]);
+    expect(controlPlane.commands.map((command) => command.path)).toEqual([
+      ["auth", "login"],
+      ["auth", "status"],
+      ["auth", "logout"]
+    ]);
   });
 });

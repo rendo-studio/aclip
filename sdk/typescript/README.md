@@ -25,7 +25,7 @@ import { AclipApp, stringArgument } from "@rendo-studio/aclip";
 export function createApp() {
   const app = new AclipApp({
     name: "notes",
-    version: "0.2.3",
+    version: "0.2.4",
     summary: "A minimal notes CLI.",
     description: "Create and list notes from a small local CLI."
   });
@@ -107,6 +107,42 @@ await build_cli({
 ```
 
 If you prefer the fully explicit name, `build_cli(...)` is the same API behind `build(...)`.
+
+## Authentication
+
+ACLIP now standardizes a minimum auth contract around portable credential declarations and an optional reserved `auth` control plane.
+
+```ts
+import {
+  buildAuthControlPlane,
+  envCredential,
+  fileCredential
+} from "@rendo-studio/aclip";
+
+const credentials = [
+  envCredential("notes_token", {
+    envVar: "ACLIP_NOTES_TOKEN",
+    description: "Remote notes API token.",
+    required: true
+  }),
+  fileCredential("notes_token_file", {
+    path: ".secrets/notes-token.txt",
+    description: "Optional local token file."
+  })
+];
+
+const auth = buildAuthControlPlane({
+  loginDescription: "Login to the author-defined remote service.",
+  loginExamples: ["notes auth login"],
+  loginHandler: async () => ({ status: "logged_in" }),
+  statusDescription: "Inspect current auth state.",
+  statusExamples: ["notes auth status"],
+  statusHandler: async () => ({ status: "active" }),
+  logoutDescription: "Logout from the author-defined remote service.",
+  logoutExamples: ["notes auth logout"],
+  logoutHandler: async () => ({ status: "logged_out" })
+});
+```
 
 In a conventional project layout, ACLIP infers:
 
