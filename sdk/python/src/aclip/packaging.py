@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib
+import inspect
 import json
 import platform
 import subprocess
@@ -15,6 +16,7 @@ from .contracts import DistributionSpec
 
 
 AppFactory = Callable[[], AclipApp]
+FactoryTarget = str | AppFactory
 Runner = Callable[[list[str], Path], None]
 
 
@@ -29,6 +31,13 @@ class CliArtifact:
 class AppFactoryInfo:
     target: str
     factory: AppFactory
+    module_file: Path
+
+
+@dataclass(frozen=True)
+class AppTargetInfo:
+    target: str
+    app: AclipApp
     module_file: Path
 
 
@@ -57,9 +66,15 @@ def load_app_factory(target: str) -> AppFactory:
     return inspect_app_factory(target).factory
 
 
+def load_app_target(target: str) -> AclipApp:
+    return inspect_app_target(target).app
+
+
 def build_cli(
+    target: FactoryTarget | None = None,
     *,
-    app_factory: str,
+    factory: FactoryTarget | None = None,
+    app_factory: FactoryTarget | None = None,
     project_root: Path | None = None,
     source_root: Path | None = None,
     extra_paths: list[Path] | None = None,
@@ -69,8 +84,12 @@ def build_cli(
     runner: Runner | None = None,
     platform_value: str | None = None,
 ) -> CliArtifact:
-    factory_info = inspect_app_factory(app_factory)
-    resolved_app = factory_info.factory()
+    factory_info = _resolve_factory_target(
+        target=target,
+        factory=factory,
+        app_factory=app_factory,
+    )
+    resolved_app = factory_info.app
     resolved_project_root = _resolve_project_root(
         module_file=factory_info.module_file,
         project_root=project_root,
@@ -92,6 +111,7 @@ def build_cli(
         return _build_binary_artifact(
             app=resolved_app,
             binary_name=executable_name or resolved_app.name,
+            hidden_imports=[factory_info.target.partition(":")[0]],
             entry_script=launcher_script,
             project_root=resolved_project_root,
             source_root=resolved_source_root,
@@ -109,6 +129,7 @@ def _build_binary_artifact(
     *,
     app: AclipApp,
     binary_name: str,
+    hidden_imports: list[str] | None = None,
     entry_script: Path,
     project_root: Path,
     source_root: Path,
@@ -142,6 +163,8 @@ def _build_binary_artifact(
     ]
     for path in [source_root, *(extra_paths or [])]:
         command.extend(["--paths", str(path)])
+    for module_name in hidden_imports or []:
+        command.extend(["--hidden-import", module_name])
     command.append(str(entry_script))
 
     runner(command, project_root)
@@ -166,6 +189,78 @@ def _build_binary_artifact(
         binary_path=binary_path,
         manifest_path=manifest_path,
         manifest=manifest,
+    )
+
+
+def _resolve_factory_target(
+    *,
+    target: FactoryTarget | None,
+    factory: FactoryTarget | None,
+    app_factory: FactoryTarget | None,
+) -> AppTargetInfo:
+    candidates = [value for value in (target, factory, app_factory) if value is not None]
+    if len(candidates) != 1:
+        raise ValueError("build_cli requires exactly one factory target")
+
+    selected = candidates[0]
+    if isinstance(selected, str):
+        return inspect_app_target(selected)
+    return inspect_factory_callable(selected)
+
+
+def inspect_factory_callable(factory: AppFactory) -> AppTargetInfo:
+    if not callable(factory):
+        raise ValueError("factory target must be callable")
+
+    factory_name = getattr(factory, "__name__", "")
+    factory_qualname = getattr(factory, "__qualname__", "")
+    module_name = getattr(factory, "__module__", "")
+    if not module_name or not factory_name:
+        raise ValueError("factory target must expose __module__ and __name__")
+    if factory_name == "<lambda>" or "<locals>" in factory_qualname:
+        raise ValueError("factory target must be a top-level named callable")
+    if not inspect.isfunction(factory):
+        raise ValueError("factory target must be a top-level function")
+
+    module = importlib.import_module(module_name)
+    exported = getattr(module, factory_name, None)
+    if exported is not factory:
+        raise ValueError("factory target must be directly exported from its module")
+
+    module_file = getattr(module, "__file__", None)
+    if module_file is None:
+        raise ValueError("factory target module must resolve to a file-backed module")
+
+    return AppTargetInfo(
+        target=f"{module_name}:{factory_name}",
+        app=factory(),
+        module_file=Path(module_file).resolve(),
+    )
+
+
+def inspect_app_target(target: str) -> AppTargetInfo:
+    module_name, _, attr_name = target.partition(":")
+    if not module_name or not attr_name:
+        raise ValueError("app target must use the form 'module.path:attribute_name'")
+
+    module = importlib.import_module(module_name)
+    exported = getattr(module, attr_name)
+    module_file = getattr(module, "__file__", None)
+    if module_file is None:
+        raise ValueError("app target module must resolve to a file-backed module")
+
+    if callable(exported):
+        app = exported()
+    else:
+        app = exported
+
+    if not isinstance(app, AclipApp):
+        raise ValueError("app target must resolve to an AclipApp instance or no-arg factory")
+
+    return AppTargetInfo(
+        target=target,
+        app=app,
+        module_file=Path(module_file).resolve(),
     )
 
 
@@ -235,16 +330,21 @@ def _current_sdk_source_root() -> Path | None:
 
 
 def _write_launcher_script(build_dir: Path, app_factory: str) -> Path:
+    module_name, _, attr_name = app_factory.partition(":")
     launcher_path = build_dir / "_aclip_build_launcher.py"
     launcher_path.write_text(
         "\n".join(
             [
                 "from aclip import cli_main",
+                f"from {module_name} import {attr_name} as __aclip_target",
                 "",
-                f"cli_main({app_factory!r})",
+                "cli_main(__aclip_target)",
                 "",
             ]
         ),
         encoding="utf-8",
     )
     return launcher_path
+
+
+build = build_cli

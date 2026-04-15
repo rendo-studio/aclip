@@ -1,5 +1,5 @@
 import { cliMain } from "../../../src/index";
 
-import { createApp } from "./app";
+import { app } from "./app";
 
-void cliMain(createApp);
+void cliMain(app);

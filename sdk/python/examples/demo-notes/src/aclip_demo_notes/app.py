@@ -33,8 +33,6 @@ def create_app() -> AclipApp:
     )
 
     return app
-
-
 def create_note(title: str, body: str, store: str = ".aclip-demo-notes.json") -> dict:
     """Create a note in a local JSON store.
 
@@ -73,4 +71,7 @@ def _read_store(path: Path) -> list[dict[str, object]]:
 def _write_store(path: Path, notes: list[dict[str, object]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(notes, ensure_ascii=True, indent=2), encoding="utf-8")
+
+
+app = create_app()
 

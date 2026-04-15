@@ -7,8 +7,8 @@ from pathlib import Path
 from jsonschema import validate
 
 from aclip_demo_notes.app import create_app
-from aclip import AclipApp, DistributionSpec, cli_main
-from aclip.packaging import build_cli, inspect_app_factory, load_app_factory
+from aclip import AclipApp, DistributionSpec, build, cli_main
+from aclip.packaging import build_cli, inspect_app_factory, load_app_factory, load_app_target
 from aclip.schema import load_schema
 
 
@@ -19,7 +19,7 @@ def test_load_app_factory_resolves_module_factory_string():
     assert app.name == "aclip-demo-notes"
 
 
-def test_build_cli_invokes_runner_and_writes_manifest(tmp_path: Path):
+def test_build_cli_accepts_factory_callable_and_includes_hidden_import(tmp_path: Path):
     project_root = tmp_path
     source_root = project_root / "src"
     source_root.mkdir()
@@ -36,18 +36,22 @@ def test_build_cli_invokes_runner_and_writes_manifest(tmp_path: Path):
         assert command[1:5] == ["-m", "PyInstaller", "--noconfirm", "--clean"]
         python_sdk_root = Path(__file__).resolve().parents[1] / "src"
         assert command.count("--paths") == 3
+        hidden_import_index = command.index("--hidden-import")
+        assert command[hidden_import_index + 1] == "aclip_demo_notes.app"
         assert str(source_root) in command
         assert str(extra_root) in command
         assert str(python_sdk_root) in command
         assert cwd == project_root
         launcher_script = Path(command[-1])
         assert launcher_script.exists()
-        assert "cli_main('aclip_demo_notes.app:create_app')" in launcher_script.read_text(encoding="utf-8")
+        launcher_text = launcher_script.read_text(encoding="utf-8")
+        assert "from aclip_demo_notes.app import create_app as __aclip_target" in launcher_text
+        assert "cli_main(__aclip_target)" in launcher_text
         dist_dir.mkdir(exist_ok=True)
         (dist_dir / binary_name).write_bytes(b"demo-binary")
 
     artifact = build_cli(
-        app_factory="aclip_demo_notes.app:create_app",
+        create_app,
         project_root=project_root,
         source_root=source_root,
         extra_paths=[extra_root],
@@ -99,6 +103,21 @@ def test_build_cli_auto_includes_local_sdk_source_root_for_repo_layout(tmp_path:
     assert command.count("--paths") == 2
     assert str(example_source_root) in command
     assert str(python_sdk_root) in command
+    assert artifact.binary_path.name == "aclip-demo-notes.exe"
+
+
+def test_build_cli_accepts_app_import_target_string(tmp_path: Path):
+    def fake_runner(command: list[str], cwd: Path) -> None:
+        (tmp_path / "dist").mkdir(exist_ok=True)
+        (tmp_path / "dist" / "aclip-demo-notes.exe").write_bytes(b"demo-binary")
+
+    artifact = build_cli(
+        "aclip_demo_notes.app:app",
+        dist_dir=tmp_path / "dist",
+        build_dir=tmp_path / "build",
+        runner=fake_runner,
+    )
+
     assert artifact.binary_path.name == "aclip-demo-notes.exe"
 
 
@@ -157,4 +176,14 @@ def test_distribution_spec_can_emit_npm_package_manifest():
 
 def test_sdk_exposes_build_cli_only_as_a_module_level_api():
     assert not hasattr(AclipApp, "build_cli")
+
+
+def test_build_alias_points_to_build_cli():
+    assert build is build_cli
+
+
+def test_load_app_target_supports_app_instance_exports():
+    app = load_app_target("aclip_demo_notes.app:app")
+
+    assert app.name == "aclip-demo-notes"
 

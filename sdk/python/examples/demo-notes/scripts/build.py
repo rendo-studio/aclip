@@ -10,11 +10,11 @@ for path in (PYTHON_SDK_ROOT / "src", EXAMPLE_ROOT / "src"):
     if path_str not in sys.path:
         sys.path.insert(0, path_str)
 
-from aclip import build_cli
+import aclip
 
 
 def main() -> None:
-    build_cli(app_factory="aclip_demo_notes.app:create_app")
+    aclip.build("aclip_demo_notes.app:app")
 
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ npm install @rendo-studio/aclip commander
 
 ## Smallest End-to-End CLI
 
-`src/app.ts`
+`main.ts`
 
 ```ts
 import { AclipApp, stringArgument } from "@rendo-studio/aclip";
@@ -25,7 +25,7 @@ import { AclipApp, stringArgument } from "@rendo-studio/aclip";
 export function createApp() {
   const app = new AclipApp({
     name: "notes",
-    version: "0.2.0",
+    version: "0.2.1",
     summary: "A minimal notes CLI.",
     description: "Create and list notes from a small local CLI."
   });
@@ -48,25 +48,27 @@ export function createApp() {
 
   return app;
 }
+
+export const app = createApp();
 ```
 
-`src/cli.ts`
+`cli.ts`
 
 ```ts
 import { cliMain } from "@rendo-studio/aclip";
 
-import { createApp } from "./app.js";
+import { app } from "./main.js";
 
-void cliMain(createApp);
+void cliMain(app);
 ```
 
 Run it like a normal CLI:
 
 ```bash
-node --import tsx ./src/cli.ts --help
-node --import tsx ./src/cli.ts note --help
-node --import tsx ./src/cli.ts note create --help
-node --import tsx ./src/cli.ts note create --title hello --body world
+node --import tsx ./cli.ts --help
+node --import tsx ./cli.ts note --help
+node --import tsx ./cli.ts note create --help
+node --import tsx ./cli.ts note create --title hello --body world
 ```
 
 The final command emits a structured result envelope instead of ad hoc text.
@@ -76,15 +78,23 @@ The final command emits a structured result envelope instead of ad hoc text.
 From a dedicated build script:
 
 ```ts
+import * as aclip from "@rendo-studio/aclip";
+
+await aclip.build("./main.ts:app");
+```
+
+`"./main.ts:app"` is the module export that the packaged CLI will execute at runtime.
+That is why the recommended pattern is a separate `build.ts` script instead of having the app object “build itself”.
+
+If you prefer to keep initialization behind a function, ACLIP also supports an explicit factory target:
+
+```ts
 import { build_cli } from "@rendo-studio/aclip";
 
 await build_cli({
-  appFactory: "./src/app.ts:createApp"
+  factory: "./main.ts:createApp"
 });
 ```
-
-`appFactory` is the module export that the packaged CLI will execute at runtime.
-That is why the recommended pattern is a separate `build.ts` script instead of having the app object “build itself”.
 
 In a conventional project layout, ACLIP infers:
 
@@ -92,7 +102,7 @@ In a conventional project layout, ACLIP infers:
 - package name and version
 - executable name
 
-Advanced overrides such as `projectRoot`, `outDir`, `packageName`, and `packageVersion` are still available for monorepos or unusual build layouts, but they are no longer the default path.
+`src/` is optional. Advanced overrides such as `projectRoot`, `outDir`, `packageName`, and `packageVersion` are still available for monorepos or unusual build layouts, but they are no longer the default path.
 
 ## What You Get
 

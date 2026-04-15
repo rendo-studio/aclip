@@ -17,7 +17,7 @@ describe("demo notes CLI", () => {
     const projectRoot = resolve(currentDir(), "..");
     const outDir = mkdtempSync(resolve(tmpdir(), "aclip-ts-demo-"));
     const artifact = await build_cli({
-      appFactory: `${resolve(projectRoot, "examples", "demo-notes", "src", "app.ts")}:createApp`,
+      factory: `${resolve(projectRoot, "examples", "demo-notes", "src", "app.ts")}:createApp`,
       executableName: "aclip-demo-notes",
       packageName: "@aclip/demo-notes",
       packageVersion: "0.1.0",
@@ -44,7 +44,7 @@ describe("demo notes CLI", () => {
     const outDir = mkdtempSync(resolve(tmpdir(), "aclip-ts-demo-"));
     const storePath = resolve(outDir, "notes.json");
     const artifact = await build_cli({
-      appFactory: `${resolve(projectRoot, "examples", "demo-notes", "src", "app.ts")}:createApp`,
+      factory: `${resolve(projectRoot, "examples", "demo-notes", "src", "app.ts")}:createApp`,
       executableName: "aclip-demo-notes",
       packageName: "@aclip/demo-notes",
       packageVersion: "0.1.0",

@@ -14,7 +14,8 @@ export interface CliArtifact {
 }
 
 export interface BuildCliOptions {
-  appFactory: string;
+  factory?: string;
+  appFactory?: string;
   projectRoot?: string;
   outDir?: string;
   executableName?: string;
@@ -40,18 +41,32 @@ export async function loadAppFactory(target: string): Promise<() => AclipApp> {
   return factory as () => AclipApp;
 }
 
-export async function build_cli(options: BuildCliOptions): Promise<CliArtifact> {
-  const factoryInfo = inspectAppFactoryTarget(options.appFactory, options.projectRoot);
-  const projectRoot = resolveProjectRoot(factoryInfo.modulePath, options.projectRoot);
-  const app = (await loadAppFactory(factoryInfo.target))();
-  const outDir = options.outDir ?? resolve(projectRoot, "dist");
+export async function loadAppTarget(target: string): Promise<AclipApp> {
+  const info = inspectAppFactoryTarget(target);
+  const importedModule = await loadFactoryModule(info.modulePath);
+  return resolveImportedAppTarget(importedModule[info.exportName]);
+}
+
+type BuildCliOverrides = Omit<BuildCliOptions, "factory" | "appFactory">;
+
+export async function build_cli(target: string, overrides?: BuildCliOverrides): Promise<CliArtifact>;
+export async function build_cli(options: BuildCliOptions): Promise<CliArtifact>;
+export async function build_cli(
+  targetOrOptions: string | BuildCliOptions,
+  overrides: BuildCliOverrides = {}
+): Promise<CliArtifact> {
+  const normalizedOptions = normalizeBuildCliOptions(targetOrOptions, overrides);
+  const factoryInfo = inspectAppFactoryTarget(normalizedOptions.factory, normalizedOptions.projectRoot);
+  const projectRoot = resolveProjectRoot(factoryInfo.modulePath, normalizedOptions.projectRoot);
+  const app = await loadAppTarget(factoryInfo.target);
+  const outDir = normalizedOptions.outDir ?? resolve(projectRoot, "dist");
   const tempDir = resolve(projectRoot, ".aclip-build", randomUUID());
   const launcherFile = writeLauncherFile(tempDir, factoryInfo, defaultSdkImportSpecifier());
   const launcherEntry = relativeImportPath(projectRoot, launcherFile);
   const packageMetadata = readPackageMetadata(projectRoot);
-  const executableName = options.executableName ?? app.name;
-  const packageName = options.packageName ?? packageMetadata.name;
-  const packageVersion = options.packageVersion ?? packageMetadata.version;
+  const executableName = normalizedOptions.executableName ?? app.name;
+  const packageName = normalizedOptions.packageName ?? packageMetadata.name;
+  const packageVersion = normalizedOptions.packageVersion ?? packageMetadata.version;
   const tsupConfigFile = writeTsupConfigFile(tempDir, {
     executableName,
     launcherEntry,
@@ -95,6 +110,46 @@ export async function build_cli(options: BuildCliOptions): Promise<CliArtifact> 
     manifestPath,
     manifest
   };
+}
+
+function normalizeBuildCliOptions(
+  targetOrOptions: string | BuildCliOptions,
+  overrides: BuildCliOverrides
+): Required<Pick<BuildCliOptions, "factory">> & BuildCliOptions {
+  const options =
+    typeof targetOrOptions === "string"
+      ? {
+          ...overrides,
+          factory: targetOrOptions
+        }
+      : targetOrOptions;
+  const factory = options.factory ?? options.appFactory;
+  if (!factory) {
+    throw new Error("build_cli requires a factory target");
+  }
+
+  return {
+    ...options,
+    factory
+  };
+}
+
+async function resolveImportedAppTarget(exported: unknown): Promise<AclipApp> {
+  const app = typeof exported === "function" ? await exported() : exported;
+  if (!isAclipAppLike(app)) {
+    throw new Error("app target must resolve to an ACLIP app instance or no-arg factory");
+  }
+  return app;
+}
+
+function isAclipAppLike(value: unknown): value is AclipApp {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { run?: unknown }).run === "function" &&
+    typeof (value as { buildIndexManifest?: unknown }).buildIndexManifest === "function" &&
+    typeof (value as { name?: unknown }).name === "string"
+  );
 }
 
 function inspectAppFactoryTarget(target: string, projectRoot?: string): AppFactoryInfo {
@@ -274,3 +329,5 @@ function writeTsupConfigFile(
   );
   return configPath;
 }
+
+export const build = build_cli;

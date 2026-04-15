@@ -12,9 +12,9 @@ def resolve_app(target: AppTarget) -> AclipApp:
         return target
 
     if isinstance(target, str):
-        from .packaging import load_app_factory
+        from .packaging import load_app_target
 
-        return load_app_factory(target)()
+        return load_app_target(target)
 
     return target()
 

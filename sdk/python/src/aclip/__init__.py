@@ -2,7 +2,7 @@ from .app import AclipApp
 from .contracts import ArgumentSpec, CommandGroupSpec, CommandSpec, CredentialSpec, DistributionSpec
 from .decorators import CommandGroupBuilder
 from .launcher import cli_main
-from .packaging import CliArtifact, build_cli, load_app_factory
+from .packaging import CliArtifact, build, build_cli, load_app_factory, load_app_target
 from .session_control_plane import (
     SessionCommandConfig,
     SessionControlPlane,
@@ -19,8 +19,10 @@ __all__ = [
     "DistributionSpec",
     "CliArtifact",
     "cli_main",
+    "build",
     "build_cli",
     "load_app_factory",
+    "load_app_target",
     "SessionCommandConfig",
     "SessionControlPlane",
     "build_session_control_plane",

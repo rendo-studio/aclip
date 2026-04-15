@@ -80,3 +80,5 @@ export function createApp(): AclipApp {
 
   return app;
 }
+
+export const app = createApp();

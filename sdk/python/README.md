@@ -34,7 +34,7 @@ If you want the shortest install command, `aclip` is the official alias.
 
 ## Smallest End-to-End CLI
 
-`src/notes_cli/app.py`
+`main.py`
 
 ```python
 from aclip import AclipApp
@@ -43,7 +43,7 @@ from aclip import AclipApp
 def create_app() -> AclipApp:
     app = AclipApp(
         name="notes",
-        version="0.2.0",
+        version="0.2.1",
         summary="A minimal notes CLI.",
         description="Create and list notes from a small local CLI.",
     )
@@ -68,24 +68,28 @@ def create_app() -> AclipApp:
     )
 
     return app
+
+
+app = create_app()
 ```
 
-`src/notes_cli/__main__.py`
+`cli.py`
 
 ```python
 from aclip import cli_main
+from main import app
 
 
-cli_main("notes_cli.app:create_app")
+cli_main(app)
 ```
 
 Run it like a normal CLI:
 
 ```bash
-python -m notes_cli --help
-python -m notes_cli note --help
-python -m notes_cli note create --help
-python -m notes_cli note create --title hello --body world
+python cli.py --help
+python cli.py note --help
+python cli.py note create --help
+python cli.py note create --title hello --body world
 ```
 
 The final command emits a structured result envelope instead of ad hoc text.
@@ -95,19 +99,36 @@ The final command emits a structured result envelope instead of ad hoc text.
 From a dedicated build script:
 
 ```python
-from aclip import build_cli
+import aclip
 
 
-artifact = build_cli(
-    app_factory="notes_cli.app:create_app",
-)
+artifact = aclip.build("main:app")
 
 print(artifact.binary_path)
 print(artifact.manifest_path)
 ```
 
-`app_factory` is the import target the packaged binary will execute at runtime.
+`"main:app"` is the runtime import target the packaged binary will execute.
 That is why the recommended pattern is a separate `build.py` script instead of having the app object “build itself”.
+
+If you prefer to keep initialization behind a function, ACLIP also supports an explicit factory target:
+
+```python
+import aclip
+
+
+artifact = aclip.build(factory="main:create_app")
+```
+
+Python also supports a shorthand when you already imported a top-level factory:
+
+```python
+import aclip
+from main import create_app
+
+
+artifact = aclip.build(create_app)
+```
 
 In a conventional project layout, ACLIP infers:
 
@@ -115,7 +136,7 @@ In a conventional project layout, ACLIP infers:
 - source root
 - executable name
 
-Advanced overrides such as `project_root`, `source_root`, and `extra_paths` are still available for monorepos or non-standard layouts, but they are no longer the default path.
+`src/` is optional. Advanced overrides such as `project_root`, `source_root`, and `extra_paths` are still available for monorepos or non-standard layouts, but they are no longer the default path.
 
 ## What You Get
 

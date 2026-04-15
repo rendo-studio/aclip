@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020";
 import { describe, expect, test } from "vitest";
 
-import { AclipApp, build_cli, loadAppFactory } from "../src/index.js";
+import { AclipApp, build, build_cli, loadAppFactory } from "../src/index.js";
 
 function currentDir() {
   return fileURLToPath(new URL(".", import.meta.url));
@@ -44,8 +44,7 @@ describe("build_cli", () => {
     const projectRoot = resolve(currentDir(), "..");
     const outDir = mkdtempSync(resolve(tmpdir(), "aclip-ts-build-"));
 
-    const artifact = await build_cli({
-      appFactory: `${resolve(projectRoot, "examples", "demo-notes", "src", "app.ts")}:createApp`,
+    const artifact = await build(`${resolve(projectRoot, "examples", "demo-notes", "src", "app.ts")}:app`, {
       projectRoot,
       outDir
     });
@@ -55,7 +54,7 @@ describe("build_cli", () => {
       {
         kind: "npm_package",
         package: "@rendo-studio/aclip",
-        version: "0.2.0",
+        version: "0.2.1",
         executable: "aclip-demo-notes"
       }
     ]);
@@ -74,11 +73,15 @@ describe("build_cli", () => {
   test("SDK exposes build_cli only as a module-level API", () => {
     const app = new AclipApp({
       name: "notes",
-      version: "0.2.0",
+      version: "0.2.1",
       summary: "A minimal notes CLI.",
       description: "Create and inspect notes."
     });
 
     expect("build_cli" in app).toBe(false);
+  });
+
+  test("exports build as an alias of build_cli", () => {
+    expect(build).toBe(build_cli);
   });
 });
