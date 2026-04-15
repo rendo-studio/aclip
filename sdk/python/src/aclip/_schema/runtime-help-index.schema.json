@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aclip.dev/schema/runtime-help-index.schema.json",
+  "title": "ACLIP Runtime Help Index",
+  "type": "object",
+  "required": ["protocol", "type", "summary", "description", "command_groups"],
+  "properties": {
+    "protocol": { "const": "aclip/0.1" },
+    "type": { "const": "help_index" },
+    "summary": { "type": "string", "minLength": 1 },
+    "description": { "type": "string", "minLength": 1 },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "summary"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "summary": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "command_groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "summary"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "summary": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

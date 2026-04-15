@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aclip.dev/schema/runtime-help-group.schema.json",
+  "title": "ACLIP Runtime Help Command Group",
+  "type": "object",
+  "required": ["protocol", "type", "path", "summary", "description", "commands"],
+  "properties": {
+    "protocol": { "const": "aclip/0.1" },
+    "type": { "const": "help_command_group" },
+    "path": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string", "minLength": 1 },
+    "description": { "type": "string", "minLength": 1 },
+    "command_groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "summary"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "summary": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "summary"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "summary": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

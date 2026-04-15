@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aclip-sdk"
+version = "0.1.0"
+description = "Python reference SDK for the Agent Command Line Interface Protocol"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [
+  { name = "Rendo Studio" }
+]
+keywords = ["aclip", "cli", "agents", "sdk"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Libraries",
+]
+dependencies = [
+  "click>=8.1.8",
+]
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2.2",
+  "jsonschema>=4.25.1",
+  "pytest>=8.3.5",
+  "pyinstaller>=6.14.2",
+  "twine>=6.1.0",
+]
+
+[project.scripts]
+aclip-package = "aclip.package_cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.package-data]
+aclip = ["_schema/*.json"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+

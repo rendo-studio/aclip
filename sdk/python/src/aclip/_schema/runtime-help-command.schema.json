@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aclip.dev/schema/runtime-help-command.schema.json",
+  "title": "ACLIP Runtime Help Command",
+  "type": "object",
+  "required": ["protocol", "type", "path", "summary", "description", "usage", "arguments", "examples"],
+  "properties": {
+    "protocol": { "const": "aclip/0.1" },
+    "type": { "const": "help_command" },
+    "path": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string", "minLength": 1 },
+    "description": { "type": "string", "minLength": 1 },
+    "usage": { "type": "string", "minLength": 1 },
+    "arguments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "kind", "required", "description"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "kind": { "type": "string", "minLength": 1 },
+          "required": { "type": "boolean" },
+          "description": { "type": "string", "minLength": 1 },
+          "flag": { "type": "string" },
+          "position": { "type": "string" },
+          "default": {},
+          "choices": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "multiple": { "type": "boolean" },
+          "envVar": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "examples": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "additionalProperties": false
+}
