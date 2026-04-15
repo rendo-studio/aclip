@@ -240,7 +240,7 @@ Rules:
 
 ### 6.4 Open questions that remain unresolved
 
-- [ ] **Q: What is the minimum ACLIP auth standard for the next milestone?**
+- [x] **Q: What is the minimum ACLIP auth standard for the next milestone?**
   **A:** Solved.
   The minimum auth standard is now:
   - core credential sources: `env` and `file`
