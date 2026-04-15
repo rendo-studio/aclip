@@ -7,7 +7,7 @@ from pathlib import Path
 from jsonschema import validate
 
 from aclip_demo_notes.app import create_app
-from aclip import AclipApp, DistributionSpec, build, cli_main
+from aclip import AclipApp, DistributionSpec, build, cli_main, run_cli
 from aclip.packaging import build_cli, inspect_app_factory, load_app_factory, load_app_target
 from aclip.schema import load_schema
 
@@ -186,4 +186,8 @@ def test_load_app_target_supports_app_instance_exports():
     app = load_app_target("aclip_demo_notes.app:app")
 
     assert app.name == "aclip-demo-notes"
+
+
+def test_run_cli_alias_points_to_cli_main():
+    assert run_cli is cli_main
 

@@ -12,7 +12,7 @@ It keeps normal CLI usage natural while standardizing the parts agents actually 
 ## Install
 
 ```bash
-npm install @rendo-studio/aclip commander
+npm install @rendo-studio/aclip
 ```
 
 ## Smallest End-to-End CLI
@@ -25,7 +25,7 @@ import { AclipApp, stringArgument } from "@rendo-studio/aclip";
 export function createApp() {
   const app = new AclipApp({
     name: "notes",
-    version: "0.2.2",
+    version: "0.2.3",
     summary: "A minimal notes CLI.",
     description: "Create and list notes from a small local CLI."
   });
@@ -55,11 +55,21 @@ export const app = createApp();
 `cli.ts`
 
 ```ts
-import { cliMain } from "@rendo-studio/aclip";
+import { runCli } from "@rendo-studio/aclip";
 
 import { app } from "./main.js";
 
-void cliMain(app);
+void runCli(app);
+```
+
+If you prefer lazy initialization at process start, the launcher also accepts the factory directly:
+
+```ts
+import { runCli } from "@rendo-studio/aclip";
+
+import { createApp } from "./main.js";
+
+void runCli(createApp);
 ```
 
 Run it like a normal CLI:
@@ -83,7 +93,7 @@ import * as aclip from "@rendo-studio/aclip";
 await aclip.build("./main.ts:app");
 ```
 
-`"./main.ts:app"` is the module export that the packaged CLI will execute at runtime.
+`build(...)` is the shortest first-class path. `"./main.ts:app"` is the module export that the packaged CLI will execute at runtime.
 That is why the recommended pattern is a separate `build.ts` script instead of having the app object “build itself”.
 
 If you prefer to keep initialization behind a function, ACLIP also supports an explicit factory target:
@@ -96,6 +106,8 @@ await build_cli({
 });
 ```
 
+If you prefer the fully explicit name, `build_cli(...)` is the same API behind `build(...)`.
+
 In a conventional project layout, ACLIP infers:
 
 - project root
@@ -107,10 +119,21 @@ In a conventional project layout, ACLIP infers:
 ## What You Get
 
 - tree-shaped authoring with `AclipApp`, `group()`, and `command()`
-- `cliMain(...)` so launchers do not need manual `process.argv.slice(2)`
+- `app.run(...)` for direct execution in tests or custom hosts
+- `runCli(...)` for the default launcher path without manual `process.argv.slice(2)`
 - canonical ACLIP Markdown help rendering
 - structured result and error envelopes
-- `build_cli()` as the canonical packaging API
+- `build(...)` for the shortest packaging path, with `build_cli(...)` as the explicit equivalent
+
+## Python vs TypeScript
+
+The Python and TypeScript SDKs now share the same primary story:
+
+- define `app` in `main`
+- launch with `run_cli(app)` / `runCli(app)`
+- package with `build("main:app")` or `build("./main.ts:app")`
+
+One intentional difference remains: Python also supports `build(create_app)` for a top-level factory function. TypeScript does not expose the same shortcut because a JavaScript function object is not a stable packaging import target on its own.
 
 ## Repository
 

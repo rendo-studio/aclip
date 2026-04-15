@@ -86,7 +86,7 @@ def alias_readme(version: str) -> str:
         ## First Working CLI
 
         ```python
-        from aclip import AclipApp, cli_main
+        from aclip import AclipApp, run_cli
 
 
         def create_app() -> AclipApp:
@@ -111,7 +111,7 @@ def alias_readme(version: str) -> str:
             return app
 
 
-        cli_main("notes_cli.app:create_app")
+        run_cli("notes_cli.app:create_app")
         ```
 
         Typical usage:

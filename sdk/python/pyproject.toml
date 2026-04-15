@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rendo-aclip"
-version = "0.2.2"
+version = "0.2.3"
 description = "Python reference SDK for the Agent Command Line Interface Protocol"
 readme = "README.md"
 requires-python = ">=3.12"

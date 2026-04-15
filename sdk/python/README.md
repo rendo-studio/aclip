@@ -43,7 +43,7 @@ from aclip import AclipApp
 def create_app() -> AclipApp:
     app = AclipApp(
         name="notes",
-        version="0.2.2",
+        version="0.2.3",
         summary="A minimal notes CLI.",
         description="Create and list notes from a small local CLI.",
     )
@@ -76,11 +76,21 @@ app = create_app()
 `cli.py`
 
 ```python
-from aclip import cli_main
+from aclip import run_cli
 from main import app
 
 
-cli_main(app)
+run_cli(app)
+```
+
+If you prefer lazy initialization at process start, the launcher also accepts the factory directly:
+
+```python
+from aclip import run_cli
+from main import create_app
+
+
+run_cli(create_app)
 ```
 
 Run it like a normal CLI:
@@ -108,7 +118,7 @@ print(artifact.binary_path)
 print(artifact.manifest_path)
 ```
 
-`"main:app"` is the runtime import target the packaged binary will execute.
+`build(...)` is the shortest first-class path. `"main:app"` is the runtime import target the packaged binary will execute.
 That is why the recommended pattern is a separate `build.py` script instead of having the app object “build itself”.
 
 If you prefer to keep initialization behind a function, ACLIP also supports an explicit factory target:
@@ -130,6 +140,8 @@ from main import create_app
 artifact = aclip.build(create_app)
 ```
 
+If you want the fully explicit name, `build_cli(...)` is the same API.
+
 In a conventional project layout, ACLIP infers:
 
 - project root
@@ -142,8 +154,9 @@ In a conventional project layout, ACLIP infers:
 
 - `AclipApp` for tree-shaped CLI authoring
 - direct `handler=...` registration and decorator authoring
-- `cli_main(...)` so launchers do not need manual `sys.argv[1:]`
-- `build_cli()` as the canonical packaging API
+- `app.run(...)` for direct execution in tests or custom hosts
+- `run_cli(...)` for the default launcher path without manual `sys.argv[1:]`
+- `build(...)` for the shortest packaging path, with `build_cli(...)` as the explicit equivalent
 
 ## When To Use ACLIP
 
@@ -154,6 +167,16 @@ Use `rendo-aclip` when you want a CLI that still feels natural to command-line u
 - a stable packaging and distribution path
 
 If your goal is only a human-first CLI with free-form text output, ACLIP is probably more structure than you need.
+
+## Python vs TypeScript
+
+The Python and TypeScript SDKs now share the same primary story:
+
+- define `app` in `main`
+- launch with `run_cli(app)` / `runCli(app)`
+- package with `build("main:app")`
+
+One intentional difference remains: Python also supports `build(create_app)` for a top-level factory function. TypeScript does not expose the same shortcut because a JavaScript function object is not a stable packaging import target on its own.
 
 ## Repository
 

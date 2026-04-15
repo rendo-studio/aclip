@@ -25,3 +25,5 @@ export async function cliMain(
   process.exitCode = exitCode;
   return exitCode;
 }
+
+export const runCli = cliMain;

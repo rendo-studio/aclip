@@ -21,3 +21,6 @@ def resolve_app(target: AppTarget) -> AclipApp:
 
 def cli_main(target: AppTarget, argv: list[str] | None = None) -> None:
     raise SystemExit(resolve_app(target).run(argv))
+
+
+run_cli = cli_main

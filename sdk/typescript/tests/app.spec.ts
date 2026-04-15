@@ -10,6 +10,7 @@ import {
   booleanArgument,
   cliMain,
   integerArgument,
+  runCli,
   renderHelpMarkdown,
   stringArgument
 } from "../src/index.js";
@@ -272,5 +273,9 @@ describe("AclipApp", () => {
     }
 
     expect(JSON.parse(writes.join("")).command).toBe("note list");
+  });
+
+  test("runCli aliases cliMain", () => {
+    expect(runCli).toBe(cliMain);
   });
 });
