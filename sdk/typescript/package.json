@@ -1,5 +1,5 @@
 {
-  "name": "@aclip/sdk",
+  "name": "@rendo-studio/aclip",
   "version": "0.1.0",
   "type": "module",
   "license": "MIT",
@@ -22,7 +22,9 @@
   "scripts": {
     "build": "tsup",
     "check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "release:check": "node ./scripts/publish.mjs check",
+    "release:publish": "node ./scripts/publish.mjs publish"
   },
   "dependencies": {
     "commander": "^14.0.3",

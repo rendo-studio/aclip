@@ -29,6 +29,16 @@ Root ownership:
 - `sdk/python/`: Python reference adapter package plus example CLI
 - `sdk/typescript/`: TypeScript reference adapter package plus example CLI
 
+Canonical package entrypoints:
+
+- PyPI: `rendo-aclip`
+- PyPI short-name alias: `aclip`
+- npm: `@rendo-studio/aclip`
+
+Release strategy:
+
+- [docs/PUBLISHING-STRATEGY.md](/D:/project/rendo/aclip/docs/PUBLISHING-STRATEGY.md)
+
 ## Current status
 
 The repository currently proves:

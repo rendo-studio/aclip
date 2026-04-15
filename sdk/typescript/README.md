@@ -1,6 +1,6 @@
-# @aclip/sdk
+# @rendo-studio/aclip
 
-`@aclip/sdk` is the TypeScript reference adapter for ACLIP.
+`@rendo-studio/aclip` is the TypeScript reference adapter for ACLIP.
 
 It does not define the protocol.
 
@@ -17,13 +17,13 @@ It implements the shared ACLIP contracts maintained by the ACLIP repository and 
 ## Install
 
 ```bash
-npm install @aclip/sdk commander
+npm install @rendo-studio/aclip commander
 ```
 
 ## Quick Start
 
 ```ts
-import { AclipApp, stringArgument } from "@aclip/sdk";
+import { AclipApp, stringArgument } from "@rendo-studio/aclip";
 
 const app = new AclipApp({
   name: "demo",
@@ -57,7 +57,7 @@ process.exitCode = exitCode;
 ## Packaging
 
 ```ts
-import { packageNodeCli } from "@aclip/sdk";
+import { packageNodeCli } from "@rendo-studio/aclip";
 
 await packageNodeCli({
   app,
@@ -81,3 +81,14 @@ npm test
 npm run check
 npm run build
 ```
+
+## Release
+
+```bash
+node ./scripts/publish.mjs check
+node ./scripts/publish.mjs publish
+```
+
+Required environment:
+
+- `NPM_TOKEN`

@@ -1,6 +1,6 @@
-# aclip-sdk
+# rendo-aclip
 
-`aclip-sdk` is the Python reference adapter for ACLIP.
+`rendo-aclip` is the Python reference adapter for ACLIP.
 
 It does not define the ACLIP protocol.
 
@@ -18,8 +18,16 @@ It implements the shared protocol contracts maintained at the repository root an
 ## Install
 
 ```bash
-pip install aclip-sdk
+pip install rendo-aclip
 ```
+
+Short-name compatibility alias:
+
+```bash
+pip install aclip
+```
+
+`aclip` is published as a synchronized alias package and should always resolve to the same SDK release as `rendo-aclip`.
 
 ## Quick Start
 
@@ -61,4 +69,15 @@ python -m venv .venv
 .\.venv\Scripts\python -m pip install -e .[dev]
 .\.venv\Scripts\python -m pytest tests -q
 ```
+
+## Release
+
+```powershell
+..\..\..\.venv\Scripts\python.exe .\scripts\publish.py check
+..\..\..\.venv\Scripts\python.exe .\scripts\publish.py publish
+```
+
+Required environment:
+
+- `PYPI_TOKEN`
 

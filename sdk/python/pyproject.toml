@@ -3,7 +3,7 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "aclip-sdk"
+name = "rendo-aclip"
 version = "0.1.0"
 description = "Python reference SDK for the Agent Command Line Interface Protocol"
 readme = "README.md"
