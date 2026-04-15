@@ -35,10 +35,6 @@ Canonical package entrypoints:
 - PyPI short-name alias: `aclip`
 - npm: `@rendo-studio/aclip`
 
-Release strategy:
-
-- [docs/PUBLISHING-STRATEGY.md](/D:/project/rendo/aclip/docs/PUBLISHING-STRATEGY.md)
-
 ## Current status
 
 The repository currently proves:

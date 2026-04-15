@@ -70,14 +70,3 @@ python -m venv .venv
 .\.venv\Scripts\python -m pytest tests -q
 ```
 
-## Release
-
-```powershell
-..\..\..\.venv\Scripts\python.exe .\scripts\publish.py check
-..\..\..\.venv\Scripts\python.exe .\scripts\publish.py publish
-```
-
-Required environment:
-
-- `PYPI_TOKEN`
-

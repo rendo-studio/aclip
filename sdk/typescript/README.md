@@ -81,14 +81,3 @@ npm test
 npm run check
 npm run build
 ```
-
-## Release
-
-```bash
-node ./scripts/publish.mjs check
-node ./scripts/publish.mjs publish
-```
-
-Required environment:
-
-- `NPM_TOKEN`

@@ -126,7 +126,10 @@ def publish() -> None:
     env["TWINE_PASSWORD"] = token
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUTF8"] = "1"
-    run([sys.executable, "-m", "twine", "upload", "--non-interactive", *dist_files()], env=env)
+    run(
+        [sys.executable, "-m", "twine", "upload", "--non-interactive", "--skip-existing", *dist_files()],
+        env=env,
+    )
 
 
 def main() -> None:
