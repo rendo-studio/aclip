@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rendo-aclip"
-version = "0.3.2"
+version = "0.3.3"
 description = "Python reference SDK for the Agent Command Line Interface Protocol"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -21,6 +21,11 @@ classifiers = [
 dependencies = [
   "click>=8.1.8",
 ]
+
+[project.urls]
+Homepage = "https://github.com/rendo-studio/aclip"
+Repository = "https://github.com/rendo-studio/aclip"
+Issues = "https://github.com/rendo-studio/aclip/issues"
 
 [project.optional-dependencies]
 dev = [

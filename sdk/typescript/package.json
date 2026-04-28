@@ -1,8 +1,16 @@
 {
   "name": "@rendo-studio/aclip",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "type": "module",
   "license": "MIT",
+  "homepage": "https://github.com/rendo-studio/aclip",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rendo-studio/aclip.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rendo-studio/aclip/issues"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [

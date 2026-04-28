@@ -98,7 +98,8 @@ export async function build_cli(
   const app = await loadAppTarget(factoryInfo.target);
   const outDir = normalizedOptions.outDir ?? resolve(projectRoot, "dist");
   const tempDir = resolve(projectRoot, ".aclip-build", randomUUID());
-  const launcherFile = writeLauncherFile(tempDir, factoryInfo, defaultSdkImportSpecifier());
+  const runtimeImportSpecifier = defaultSdkRuntimeImportSpecifier();
+  const launcherFile = writeLauncherFile(tempDir, factoryInfo, runtimeImportSpecifier);
   const launcherEntry = relativeImportPath(projectRoot, launcherFile);
   const packageMetadata = readPackageMetadata(projectRoot);
   const binaryName = app.name;
@@ -121,6 +122,8 @@ export async function build_cli(
     binaryName,
     launcherEntry,
     outDir,
+    sdkPackageName: defaultSdkPackageName(),
+    sdkRuntimeImportSpecifier: runtimeImportSpecifier,
   });
 
   mkdirSync(outDir, { recursive: true });
@@ -358,10 +361,21 @@ function readPackageMetadata(projectRoot: string): { name?: string; version?: st
   };
 }
 
-function defaultSdkImportSpecifier(): string {
+function defaultSdkRuntimeImportSpecifier(): string {
   const currentFile = fileURLToPath(import.meta.url);
-  const indexFile = currentFile.endsWith(".ts") ? "index.ts" : "index.js";
-  return resolve(dirname(currentFile), indexFile);
+  const runtimeFile = currentFile.endsWith(".ts") ? "runtimeEntry.ts" : "runtime.js";
+  return resolve(dirname(currentFile), runtimeFile);
+}
+
+function defaultSdkPackageName(): string {
+  const currentFile = fileURLToPath(import.meta.url);
+  const packageJson = JSON.parse(
+    readFileSync(resolve(dirname(currentFile), "..", "package.json"), "utf8")
+  ) as { name?: string };
+  if (!packageJson.name) {
+    throw new Error("ACLIP package name could not be determined for build_cli");
+  }
+  return packageJson.name;
 }
 
 async function loadFactoryModule(modulePath: string): Promise<Record<string, unknown>> {
@@ -406,6 +420,8 @@ function writeTsupConfigFile(
     binaryName: string;
     launcherEntry: string;
     outDir: string;
+    sdkPackageName: string;
+    sdkRuntimeImportSpecifier: string;
   },
 ): string {
   const configPath = resolve(tempDir, "tsup.build.config.ts");
@@ -426,6 +442,12 @@ function writeTsupConfigFile(
       "  silent: true,",
       "  splitting: false,",
       '  noExternal: ["commander"],',
+      "  esbuildOptions(buildOptions) {",
+      "    buildOptions.alias = {",
+      "      ...(buildOptions.alias ?? {}),",
+      `      ${JSON.stringify(options.sdkPackageName)}: ${JSON.stringify(options.sdkRuntimeImportSpecifier)},`,
+      "    };",
+      "  },",
       '  banner: { js: "#!/usr/bin/env node" },',
       "});",
       "",

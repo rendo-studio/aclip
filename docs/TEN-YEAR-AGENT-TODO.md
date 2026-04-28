@@ -81,9 +81,9 @@ The following are explicitly out of scope for this TODO:
 
 Published release:
 
-- PyPI: `rendo-aclip==0.3.2`
-- PyPI alias: `aclip==0.3.2`
-- npm: `@rendo-studio/aclip@0.3.2`
+- PyPI: `rendo-aclip==0.3.3`
+- PyPI alias: `aclip==0.3.3`
+- npm: `@rendo-studio/aclip@0.3.3`
 
 ## Completion rule
 

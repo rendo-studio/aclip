@@ -107,6 +107,11 @@ def alias_pyproject(version: str) -> str:
         dependencies = [
           "{CANONICAL_NAME}=={version}",
         ]
+
+        [project.urls]
+        Homepage = "https://github.com/rendo-studio/aclip"
+        Repository = "https://github.com/rendo-studio/aclip"
+        Issues = "https://github.com/rendo-studio/aclip/issues"
         """
     )
 

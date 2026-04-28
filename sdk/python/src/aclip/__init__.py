@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from .auth_control_plane import (
     AUTH_STATES,
     AuthCommandConfig,
@@ -29,21 +31,34 @@ from .doctor_control_plane import (
     doctor_result,
 )
 from .launcher import cli_main, run_cli
-from .packaging import (
-    CliArtifact,
-    SkillExportArtifact,
-    build,
-    build_cli,
-    export_skills,
-    load_app_factory,
-    load_app_target,
-)
 from .runtime import AUTH_ERROR_CODES
 from .session_control_plane import (
     SessionCommandConfig,
     SessionControlPlane,
     build_session_control_plane,
 )
+
+if TYPE_CHECKING:
+    from .packaging import (
+        CliArtifact,
+        SkillExportArtifact,
+        build,
+        build_cli,
+        export_skills,
+        load_app_factory,
+        load_app_target,
+    )
+
+
+_PACKAGING_EXPORTS = {
+    "CliArtifact",
+    "SkillExportArtifact",
+    "build",
+    "build_cli",
+    "export_skills",
+    "load_app_factory",
+    "load_app_target",
+}
 
 __all__ = [
     "AclipApp",
@@ -84,3 +99,13 @@ __all__ = [
     "SessionControlPlane",
     "build_session_control_plane",
 ]
+
+
+def __getattr__(name: str):
+    if name in _PACKAGING_EXPORTS:
+        from . import packaging as _packaging
+
+        value = getattr(_packaging, name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module 'aclip' has no attribute {name!r}")

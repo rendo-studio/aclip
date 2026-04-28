@@ -2,6 +2,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 
 import Ajv2020 from "ajv/dist/2020";
 import { describe, expect, test } from "vitest";
@@ -108,6 +109,44 @@ describe("build_cli", () => {
     ]);
     validateAgainstManifestSchema(artifact.manifest);
   }, 20000);
+
+  test("produces a runnable consumer artifact for package-root imports", async () => {
+    const projectRoot = resolve(currentDir(), "..");
+    const fixtureApp = resolve(currentDir(), "fixtures", "consumer-app.ts");
+    const outDir = mkdtempSync(resolve(tmpdir(), "aclip-ts-consumer-build-"));
+    const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+
+    const sdkBuild = spawnSync(npmCommand, ["run", "build"], {
+      cwd: projectRoot,
+      encoding: "utf8",
+      shell: process.platform === "win32"
+    });
+    expect(sdkBuild.status).toBe(0);
+
+    const artifact = await build_cli({
+      factory: `${fixtureApp}:app`,
+      projectRoot,
+      outDir,
+      packageName: "@fixture/consumer-app",
+      packageVersion: "0.1.0"
+    });
+
+    expect(readFileSync(artifact.entryPath, "utf8")).not.toContain("@rendo-studio/aclip");
+
+    const result = spawnSync(process.execPath, [artifact.entryPath, "status"], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        NODE_OPTIONS: ""
+      }
+    });
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      status: "ok",
+      store: ".consumer-fixture.json"
+    });
+  }, 60000);
 
   test("requires an explicit packageVersion when package.json.version diverges from AclipApp.version", async () => {
     const projectRoot = resolve(currentDir(), "..");
@@ -239,7 +278,7 @@ describe("build_cli", () => {
   test("export_skills rejects packages without SKILL.md", async () => {
     const app = new AclipApp({
       name: "notes",
-      version: "0.3.2",
+      version: "0.3.3",
       summary: "A minimal notes CLI.",
       description: "Create and inspect notes."
     });
