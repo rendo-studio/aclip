@@ -39,7 +39,7 @@ Canonical package entrypoints:
 
 The repository currently proves:
 
-- a stable ACLIP core with canonical Markdown help and structured envelopes
+- a stable ACLIP core with canonical Markdown help, author-owned success output, and structured errors
 - cross-language reference adapters in Python and TypeScript
 - working example CLI artifacts in both ecosystems
 

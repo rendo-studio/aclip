@@ -22,7 +22,7 @@ def translate_argument_spec(argument: ArgumentSpec) -> click.Parameter:
         )
 
     kwargs: dict[str, Any] = {
-        "param_decls": [argument.resolved_flag()],
+        "param_decls": [*argument.resolved_flags(), argument.name],
         "required": argument.required if argument.kind != "boolean" else False,
         "is_flag": argument.kind == "boolean",
         "multiple": argument.multiple,

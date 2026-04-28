@@ -40,6 +40,14 @@ def test_translate_argument_spec_preserves_core_click_shapes():
             env_var="ACLIP_MODE",
         )
     )
+    alias_parameter = translate_argument_spec(
+        ArgumentSpec(
+            name="version_flag",
+            kind="boolean",
+            description="Show version aliases.",
+            flags=("--version", "-V", "-v"),
+        )
+    )
 
     assert isinstance(string_parameter, click.Option)
     assert string_parameter.opts == ["--title"]
@@ -67,4 +75,7 @@ def test_translate_argument_spec_preserves_core_click_shapes():
     assert list(rich_parameter.type.choices) == ["fast", "safe"]
     assert rich_parameter.multiple is True
     assert rich_parameter.envvar == "ACLIP_MODE"
+
+    assert isinstance(alias_parameter, click.Option)
+    assert alias_parameter.opts == ["--version", "-V", "-v"]
 

@@ -4,7 +4,7 @@
 
 **Goal:** ship the first `aclip` closed loop with a reference SDK and a packaged example binary CLI.
 
-**Architecture:** canonical contracts in `schema/`, a Python reference adapter in `sdk/python/src/aclip/`, and a sample notes CLI in `sdk/python/examples/demo-notes/src/aclip_demo_notes/` that emits compliant envelopes and tree-shaped help surfaces.
+**Architecture:** canonical contracts in `schema/`, a Python reference adapter in `sdk/python/src/aclip/`, and a sample notes CLI in `sdk/python/examples/demo-notes/src/aclip_demo_notes/` that emits app-defined success output, structured errors, and tree-shaped help surfaces.
 
 **Tech Stack:** Python 3.12, setuptools, pytest, PyInstaller
 
@@ -34,7 +34,7 @@ Steps:
 
 - write tests for manifest index generation
 - write tests for command detail disclosure
-- write tests for natural CLI execution and structured result envelopes
+- write tests for natural CLI execution and structured error envelopes
 
 ## Task 3: implement the reference SDK
 
@@ -48,7 +48,7 @@ Steps:
 
 - model commands, arguments, credentials, and manifests
 - generate command detail and index disclosure from one source of truth
-- emit structured result and error envelopes with stable exit codes
+- leave successful stdout author-owned while emitting structured errors with stable exit codes
 
 ## Task 4: implement the example CLI
 

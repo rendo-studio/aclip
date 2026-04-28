@@ -77,6 +77,12 @@ Specifically:
 - ACLIP does not implement the author's session recovery logic
 - ACLIP does not define the author's business session state model
 
+If this extension evolves further, it should follow the same control-plane response pattern as `auth` and `doctor`:
+
+- small structured machine fields first
+- optional short `guidance_md` for explanation or next steps
+- no large free-form Markdown body as the primary success contract
+
 Descriptions and handlers remain the author's responsibility.
 
 ## 6. Non-goals

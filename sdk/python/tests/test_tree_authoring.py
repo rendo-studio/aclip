@@ -46,7 +46,7 @@ def test_nested_tree_authoring_compiles_to_flat_manifest_paths():
         ],
     )
 
-    manifest = app.build_index_manifest(binary_name="demo")
+    manifest = app.build_index_manifest()
     root_payload = app.build_help_payload()
 
     assert manifest["commands"] == [

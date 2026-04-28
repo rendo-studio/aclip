@@ -21,7 +21,6 @@ Those surfaces are:
 - runtime help command group payload
 - runtime help command payload
 - canonical Markdown help rendering
-- result envelope
 - error envelope
 
 ## 3. Cross-language requirement
@@ -35,7 +34,7 @@ Python and TypeScript reference adapters must therefore remain semantically equi
 - reserved `--help` behavior
 - manifest field meanings
 - runtime Markdown section order
-- envelope shape
+- error envelope shape
 - default exit code semantics
 
 ## 4. Release verification

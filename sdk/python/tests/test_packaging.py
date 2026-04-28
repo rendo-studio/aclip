@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import sys
 import tomllib
 from pathlib import Path
@@ -10,16 +11,63 @@ from aclip_demo_notes.app import create_app
 from aclip import (
     AclipApp,
     AUTH_ERROR_CODES,
+    AUTH_STATES,
     AuthCommandConfig,
+    AuthNextAction,
+    AuthStatus,
     CredentialSpec,
+    DOCTOR_CHECK_SEVERITIES,
+    DOCTOR_CHECK_STATUSES,
+    DoctorCheck,
+    DoctorCommandConfig,
+    DoctorRemediation,
     DistributionSpec,
+    auth_status_result,
     build,
     build_auth_control_plane,
+    build_doctor_control_plane,
     cli_main,
+    doctor_result,
+    export_skills,
     run_cli,
 )
 from aclip.packaging import build_cli, inspect_app_factory, load_app_factory, load_app_target
+from aclip.runtime import error_envelope
 from aclip.schema import load_schema
+
+
+def _write_skill_source(
+    root: Path,
+    *,
+    name: str,
+    description: str,
+    metadata: dict[str, str] | None = None,
+) -> Path:
+    skill_dir = root / name
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    metadata_lines = ""
+    if metadata:
+        metadata_lines = "\n".join(
+            [f"  {key}: {value}" for key, value in metadata.items()]
+        )
+        metadata_lines = f"metadata:\n{metadata_lines}\n"
+
+    (skill_dir / "SKILL.md").write_text(
+        (
+            "---\n"
+            f"name: {name}\n"
+            f"description: {description}\n"
+            f"{metadata_lines}"
+            "---\n\n"
+            f"# {name}\n\n"
+            "Developer-authored skill body.\n"
+        ),
+        encoding="utf-8",
+    )
+    references_dir = skill_dir / "references"
+    references_dir.mkdir(exist_ok=True)
+    (references_dir / "README.md").write_text("reference", encoding="utf-8")
+    return skill_dir
 
 
 def test_load_app_factory_resolves_module_factory_string():
@@ -45,6 +93,12 @@ def test_build_cli_accepts_factory_callable_and_includes_hidden_import(tmp_path:
         assert command[0].endswith("python.exe") or command[0].endswith("python")
         assert command[1:5] == ["-m", "PyInstaller", "--noconfirm", "--clean"]
         python_sdk_root = Path(__file__).resolve().parents[1] / "src"
+        pythonpath_entries = os.environ.get("PYTHONPATH", "").split(os.pathsep)
+        assert pythonpath_entries[:3] == [
+            str(source_root),
+            str(extra_root),
+            str(python_sdk_root),
+        ]
         assert command.count("--paths") == 3
         hidden_import_index = command.index("--hidden-import")
         assert command[hidden_import_index + 1] == "aclip_demo_notes.app"
@@ -166,7 +220,7 @@ def test_cli_main_uses_default_argv(capsys):
         sys.argv = original_argv
 
     payload = json.loads(capsys.readouterr().out)
-    assert payload["command"] == "note list"
+    assert payload == {"notes": []}
 
 
 def test_distribution_spec_can_emit_npm_package_manifest():
@@ -273,4 +327,174 @@ def test_build_auth_control_plane_provides_reserved_auth_group():
         ("auth", "status"),
         ("auth", "logout"),
     ]
+
+
+def test_auth_status_result_provides_small_agent_friendly_status_shape():
+    payload = auth_status_result(
+        AuthStatus(
+            state="authenticated",
+            principal="dev@rendo.cn",
+            expires_at="2026-04-21T00:00:00Z",
+            next_actions=[
+                AuthNextAction(
+                    summary="Refresh before expiry",
+                    command="notes auth login",
+                )
+            ],
+        ),
+        guidance_md="Credential is valid. Refresh before the expiry window if long-running work is expected.",
+    )
+
+    assert payload == {
+        "state": "authenticated",
+        "principal": "dev@rendo.cn",
+        "expires_at": "2026-04-21T00:00:00Z",
+        "next_actions": [
+            {
+                "summary": "Refresh before expiry",
+                "command": "notes auth login",
+            }
+        ],
+        "guidance_md": "Credential is valid. Refresh before the expiry window if long-running work is expected.",
+    }
+    assert "authenticated" in AUTH_STATES
+
+
+def test_error_envelope_supports_richer_machine_metadata():
+    payload = error_envelope(
+        "note sync",
+        "auth_required",
+        "authentication required",
+        category="auth",
+        retryable=False,
+        hint="run `notes auth login` first",
+    )
+
+    assert payload["error"] == {
+        "code": "auth_required",
+        "message": "authentication required",
+        "category": "auth",
+        "retryable": False,
+        "hint": "run `notes auth login` first",
+    }
+
+
+def test_build_doctor_control_plane_provides_reserved_doctor_group():
+    control_plane = build_doctor_control_plane(
+        DoctorCommandConfig(
+            check_description="Run author-defined environment checks.",
+            check_examples=["notes doctor check"],
+            check_handler=lambda _payload: {"checks": []},
+            fix_description="Apply author-defined fixes for failed checks.",
+            fix_examples=["notes doctor fix"],
+            fix_handler=lambda _payload: {"checks": []},
+        )
+    )
+
+    assert control_plane.command_group.path == ("doctor",)
+    assert [command.path for command in control_plane.commands] == [
+        ("doctor", "check"),
+        ("doctor", "fix"),
+    ]
+
+
+def test_doctor_result_provides_stable_check_vocabulary_and_guidance():
+    payload = doctor_result(
+        checks=[
+            DoctorCheck(
+                id="credentials",
+                status="warn",
+                severity="medium",
+                category="auth",
+                summary="Credential is missing or expired.",
+                hint="Run the auth flow before retrying the command.",
+                remediation=[
+                    DoctorRemediation(
+                        summary="Login to refresh the credential.",
+                        command="notes auth login",
+                        automatable=True,
+                    )
+                ],
+            )
+        ],
+        guidance_md="Fix the auth check first, then rerun the original command.",
+    )
+
+    assert payload == {
+        "checks": [
+            {
+                "id": "credentials",
+                "status": "warn",
+                "severity": "medium",
+                "category": "auth",
+                "summary": "Credential is missing or expired.",
+                "hint": "Run the auth flow before retrying the command.",
+                "remediation": [
+                    {
+                        "summary": "Login to refresh the credential.",
+                        "command": "notes auth login",
+                        "automatable": True,
+                    }
+                ],
+            }
+        ],
+        "guidance_md": "Fix the auth check first, then rerun the original command.",
+    }
+    assert "warn" in DOCTOR_CHECK_STATUSES
+    assert "medium" in DOCTOR_CHECK_SEVERITIES
+
+
+def test_export_skills_copies_cli_and_command_skill_packages(tmp_path: Path):
+    app = create_app()
+    cli_skill_dir = _write_skill_source(
+        tmp_path,
+        name="notes-overview",
+        description="Use the notes CLI safely.",
+        metadata={"author": "demo"},
+    )
+    command_skill_dir = _write_skill_source(
+        tmp_path,
+        name="note-create-best-practice",
+        description="Create notes with the recommended flow.",
+    )
+
+    app.add_cli_skill(cli_skill_dir)
+    app.add_command_skill(("note", "create"), command_skill_dir, metadata={"custom": "true"})
+
+    artifact = export_skills(app, output_dir=tmp_path / "dist" / "skills")
+
+    assert artifact.index_path.name == "skills.aclip.json"
+    assert [package["kind"] for package in artifact.index["packages"]] == ["cli", "command"]
+    assert artifact.output_dir == tmp_path / "dist" / "skills"
+
+    exported_cli_skill = artifact.output_dir / "notes-overview" / "SKILL.md"
+    exported_command_skill = artifact.output_dir / "note-create-best-practice" / "SKILL.md"
+    assert exported_cli_skill.exists()
+    assert exported_command_skill.exists()
+    assert (artifact.output_dir / "notes-overview" / "references" / "README.md").exists()
+
+    cli_text = exported_cli_skill.read_text(encoding="utf-8")
+    assert "aclip-cli-name: aclip-demo-notes" in cli_text
+    assert "aclip-hook-kind: cli" in cli_text
+    assert "author: demo" in cli_text
+
+    command_text = exported_command_skill.read_text(encoding="utf-8")
+    assert "aclip-hook-kind: command" in command_text
+    assert "aclip-command-path: note create" in command_text
+    assert "aclip-command-summary: Create a note" in command_text
+    assert "custom: true" in command_text
+
+
+def test_export_skills_rejects_missing_skill_markdown(tmp_path: Path):
+    app = create_app()
+    broken_skill_dir = tmp_path / "broken-skill"
+    broken_skill_dir.mkdir(parents=True, exist_ok=True)
+    app.add_cli_skill(broken_skill_dir)
+
+    try:
+        export_skills(app, output_dir=tmp_path / "dist" / "skills")
+    except ValueError as exc:
+        assert "SKILL.md" in str(exc)
+    else:
+        raise AssertionError("expected export_skills to reject a skill package without SKILL.md")
 

@@ -12,6 +12,7 @@ export interface ArgumentSpec {
   description: string;
   required?: boolean;
   flag?: string;
+  flags?: string[];
   positional?: boolean;
   defaultValue?: unknown;
   choices?: string[];
@@ -68,14 +69,27 @@ export interface CommandGroupSpec {
   commandGroups: CommandGroupSpec[];
 }
 
+export interface CliSkillHook {
+  sourceDir: string;
+  metadata?: Record<string, string>;
+}
+
+export interface CommandSkillHook {
+  commandPath: string[];
+  sourceDir: string;
+  metadata?: Record<string, string>;
+}
+
 export interface AppOptions {
   name: string;
-  version: string;
+  version?: string;
   summary: string;
   description: string;
   commands?: CommandSpec[];
   commandGroups?: CommandGroupSpec[];
   credentials?: CredentialSpec[];
+  cliSkills?: CliSkillHook[];
+  commandSkills?: CommandSkillHook[];
 }
 
 export interface CredentialOptions {
@@ -105,7 +119,7 @@ export interface CommandGroupRegistration {
 }
 
 export interface BuildIndexManifestOptions {
-  binaryName: string;
+  binaryName?: string;
   distribution?: DistributionSpec[];
 }
 
@@ -141,16 +155,31 @@ export interface HelpCommandPayload {
 
 export type HelpPayload = HelpIndexPayload | HelpCommandGroupPayload | HelpCommandPayload;
 
-export function resolveFlag(argument: ArgumentSpec): string | null {
+export function resolveFlags(argument: ArgumentSpec): string[] {
   if (argument.positional) {
-    return null;
+    return [];
   }
-  return argument.flag ?? `--${argument.name.replaceAll("_", "-")}`;
+  if (argument.flag !== undefined && argument.flags !== undefined) {
+    throw new Error("argument cannot declare both flag and flags");
+  }
+  if (argument.flags?.length === 0) {
+    throw new Error("argument flags must contain at least one alias");
+  }
+  if (argument.flags?.length) {
+    return [...argument.flags];
+  }
+  return [argument.flag ?? `--${argument.name.replaceAll("_", "-")}`];
+}
+
+export function resolveFlag(argument: ArgumentSpec): string | null {
+  const flags = resolveFlags(argument);
+  return flags[0] ?? null;
 }
 
 export function argumentToManifest(argument: ArgumentSpec): Record<string, unknown> {
+  const flags = resolveFlags(argument);
   const payload: Record<string, unknown> = {
-    name: argument.flag ?? argument.name,
+    name: flags[0] ?? argument.name,
     kind: argument.kind,
     required: Boolean(argument.required),
     description: argument.description
@@ -160,6 +189,9 @@ export function argumentToManifest(argument: ArgumentSpec): Record<string, unkno
     payload.position = argument.name;
   } else {
     payload.flag = resolveFlag(argument);
+    if (flags.length > 1) {
+      payload.flags = flags;
+    }
   }
   if (argument.defaultValue !== undefined) {
     payload.default = argument.defaultValue;

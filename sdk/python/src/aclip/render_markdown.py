@@ -62,13 +62,7 @@ def _render_group(payload: dict[str, Any], tool_name: str) -> str:
     lines.extend(["## Commands", ""])
     for command in payload["commands"]:
         lines.append(f"- `{command['path']}`: {command['summary']}")
-    lines.extend(
-        [
-            "",
-            _render_next_line(tool_name),
-            "",
-        ]
-    )
+    lines.append("")
     return "\n".join(lines)
 
 
@@ -76,12 +70,9 @@ def _render_command(payload: dict[str, Any]) -> str:
     lines = [
         f"# {payload['path']}",
         "",
-        payload["summary"],
-        "",
     ]
-    description = payload.get("description")
-    if description:
-        lines.extend([description, ""])
+    description = payload.get("description") or payload["summary"]
+    lines.extend([description, ""])
 
     lines.extend(
         [
@@ -135,6 +126,9 @@ def _render_command(payload: dict[str, Any]) -> str:
 def _render_argument_label(argument: dict[str, Any]) -> str:
     kind = argument["kind"]
     kind_label = _kind_token(kind)
+    if "flags" in argument:
+        alias_label = ", ".join(argument["flags"])
+        return f"{alias_label} {kind_label}" if kind != "boolean" else alias_label
     if "flag" in argument:
         return f"{argument['flag']} {kind_label}" if kind != "boolean" else argument["flag"]
     if "position" in argument:

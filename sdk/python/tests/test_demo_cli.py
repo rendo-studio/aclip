@@ -49,7 +49,28 @@ def test_bare_invocation_matches_help_markdown():
     assert bare_result.stdout == help_result.stdout
 
 
-def test_natural_cli_execution_returns_structured_result(tmp_path):
+def test_help_alias_matches_root_help():
+    help_result = run_demo("--help")
+    alias_result = run_demo("help")
+
+    assert alias_result.returncode == 0
+    assert alias_result.stdout == help_result.stdout
+
+
+def test_root_version_flags_return_plain_version():
+    long_flag = run_demo("--version")
+    short_flag = run_demo("-V")
+    lower_short_flag = run_demo("-v")
+
+    assert long_flag.returncode == 0
+    assert long_flag.stdout == "aclip-demo-notes 0.1.0\n"
+    assert short_flag.returncode == 0
+    assert short_flag.stdout == "aclip-demo-notes 0.1.0\n"
+    assert lower_short_flag.returncode == 0
+    assert lower_short_flag.stdout == "aclip-demo-notes 0.1.0\n"
+
+
+def test_natural_cli_execution_returns_app_defined_success_output(tmp_path):
     store = tmp_path / "notes.json"
 
     result = run_demo(
@@ -65,11 +86,10 @@ def test_natural_cli_execution_returns_structured_result(tmp_path):
 
     assert result.returncode == 0
     payload = json.loads(result.stdout)
-    assert payload["type"] == "result"
-    assert payload["ok"] is True
-    assert payload["command"] == "note create"
-    assert payload["data"]["note"]["title"] == "hello"
-    validate(payload, load_schema("result"))
+    assert payload["note"]["title"] == "hello"
+    assert "protocol" not in payload
+    assert "ok" not in payload
+    assert "command" not in payload
 
 
 def test_direct_script_execution_still_works_for_binary_packaging_entrypoint():
@@ -110,8 +130,7 @@ def test_command_group_help_returns_only_group_level_children():
         "Create and list notes in the local JSON store.\n\n"
         "## Commands\n\n"
         "- `note create`: Create a note\n"
-        "- `note list`: List notes\n\n"
-        "Next: run `aclip-demo-notes <path> --help` for one command group or command shown above.\n"
+        "- `note list`: List notes\n"
     )
 
 
@@ -121,7 +140,6 @@ def test_command_help_returns_command_detail():
     assert result.returncode == 0
     assert result.stdout == (
         "# note create\n\n"
-        "Create a note\n\n"
         "Create a note in a local JSON store.\n\n"
         "## Usage\n\n"
         "```text\n"
@@ -136,6 +154,15 @@ def test_command_help_returns_command_detail():
         "aclip-demo-notes note create --title hello --body world\n"
         "```\n"
     )
+
+
+def test_help_all_expands_subtree_markdown():
+    result = run_demo("note", "--help", "--all")
+
+    assert result.returncode == 0
+    assert result.stdout.startswith("# note\n\n")
+    assert "\n---\n\n# note create\n\n" in result.stdout
+    assert "\n---\n\n# note list\n\n" in result.stdout
 
 
 def test_invalid_usage_returns_error_envelope():

@@ -1,5 +1,15 @@
 import type { CommandGroupSpec, CommandHandler, CommandSpec } from "./contracts.js";
 
+export const AUTH_STATES = [
+  "authenticated",
+  "unauthenticated",
+  "expired",
+  "partial",
+  "unknown"
+] as const;
+
+export type AuthState = (typeof AUTH_STATES)[number];
+
 export interface AuthCommandConfig {
   loginDescription: string;
   loginExamples: string[];
@@ -17,6 +27,19 @@ export interface AuthCommandConfig {
 export interface AuthControlPlane {
   commandGroup: CommandGroupSpec;
   commands: CommandSpec[];
+}
+
+export interface AuthNextAction {
+  summary: string;
+  command?: string;
+}
+
+export interface AuthStatus {
+  state: AuthState;
+  principal?: string;
+  expires_at?: string;
+  missing_credentials?: string[];
+  next_actions?: AuthNextAction[];
 }
 
 export function buildAuthControlPlane(config: AuthCommandConfig): AuthControlPlane {
@@ -41,6 +64,19 @@ export function buildAuthControlPlane(config: AuthCommandConfig): AuthControlPla
       ),
       command(["auth", "logout"], "Logout", config.logoutDescription, config.logoutExamples, config.logoutHandler)
     ]
+  };
+}
+
+export function authStatusResult(
+  status: AuthStatus,
+  options: { guidance_md?: string } = {}
+): AuthStatus & { guidance_md?: string } {
+  if (!AUTH_STATES.includes(status.state)) {
+    throw new Error(`unsupported auth state: ${status.state}`);
+  }
+  return {
+    ...status,
+    ...(options.guidance_md ? { guidance_md: options.guidance_md } : {})
   };
 }
 

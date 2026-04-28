@@ -1,8 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from .contracts import CommandGroupSpec, CommandHandler, CommandSpec
+
+
+AUTH_STATES = {
+    "authenticated",
+    "unauthenticated",
+    "expired",
+    "partial",
+    "unknown",
+}
 
 
 @dataclass(frozen=True)
@@ -24,6 +34,43 @@ class AuthCommandConfig:
 class AuthControlPlane:
     command_group: CommandGroupSpec
     commands: list[CommandSpec]
+
+
+@dataclass(frozen=True)
+class AuthNextAction:
+    summary: str
+    command: str | None = None
+
+    def to_payload(self) -> dict[str, Any]:
+        payload = {"summary": self.summary}
+        if self.command is not None:
+            payload["command"] = self.command
+        return payload
+
+
+@dataclass(frozen=True)
+class AuthStatus:
+    state: str
+    principal: str | None = None
+    expires_at: str | None = None
+    missing_credentials: list[str] = field(default_factory=list)
+    next_actions: list[AuthNextAction] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.state not in AUTH_STATES:
+            raise ValueError(f"unsupported auth state: {self.state}")
+
+    def to_payload(self) -> dict[str, Any]:
+        payload = {"state": self.state}
+        if self.principal is not None:
+            payload["principal"] = self.principal
+        if self.expires_at is not None:
+            payload["expires_at"] = self.expires_at
+        if self.missing_credentials:
+            payload["missing_credentials"] = list(self.missing_credentials)
+        if self.next_actions:
+            payload["next_actions"] = [action.to_payload() for action in self.next_actions]
+        return payload
 
 
 def build_auth_control_plane(config: AuthCommandConfig) -> AuthControlPlane:
@@ -57,6 +104,17 @@ def build_auth_control_plane(config: AuthCommandConfig) -> AuthControlPlane:
             ),
         ],
     )
+
+
+def auth_status_result(
+    status: AuthStatus | dict[str, Any],
+    *,
+    guidance_md: str | None = None,
+) -> dict[str, Any]:
+    payload = status.to_payload() if isinstance(status, AuthStatus) else dict(status)
+    if guidance_md is not None:
+        payload["guidance_md"] = guidance_md
+    return payload
 
 
 def _command(

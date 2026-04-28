@@ -61,9 +61,9 @@ def test_click_backend_parses_choices_multiple_and_envvar(monkeypatch, capsys):
 
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["data"]["mode"] == "fast"
-    assert payload["data"]["tag"] == ["a", "b"]
-    assert payload["data"]["store"] == ".env-store.json"
+    assert payload["mode"] == "fast"
+    assert payload["tag"] == ["a", "b"]
+    assert payload["store"] == ".env-store.json"
 
 
 def test_command_detail_exposes_choices_multiple_envvar_and_usage_shape():
@@ -126,4 +126,42 @@ def test_command_detail_exposes_choices_multiple_envvar_and_usage_shape():
     assert detail["usage"] == (
         "demo filter run --mode <string> [--tag <string>]... [--store <string>]"
     )
+
+
+def test_click_backend_supports_multi_flag_aliases_on_one_argument(capsys):
+    app = AclipApp(
+        name="demo",
+        version="0.1.0",
+        summary="Demo CLI",
+        description="Demo CLI for click backend coverage.",
+        commands=[
+            CommandSpec(
+                path=("status",),
+                summary="Status",
+                description="Show status.",
+                arguments=[
+                    ArgumentSpec(
+                        name="show_version",
+                        kind="boolean",
+                        description="Show version aliases.",
+                        flags=("--version", "-V", "-v"),
+                    )
+                ],
+                examples=["demo status --version"],
+                handler=lambda arguments: arguments,
+            )
+        ],
+    )
+
+    assert app.run(["status", "--version"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"show_version": True}
+
+    assert app.run(["status", "-V"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"show_version": True}
+
+    assert app.run(["status", "-v"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"show_version": True}
+
+    detail = app.build_command_detail(["status"])
+    assert detail["arguments"][0]["flags"] == ["--version", "-V", "-v"]
 

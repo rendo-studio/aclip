@@ -8,7 +8,8 @@ It covers:
 
 - invocation compatibility
 - progressive disclosure
-- structured runtime envelopes
+- author-owned success output
+- structured error envelopes
 - credential declaration
 - minimum auth contract
 - distribution metadata reservation
@@ -69,6 +70,55 @@ That means runtime help should exclude low-value registration metadata such as:
 - registry-only identifiers
 - other fields not needed to choose the next command
 
+ACLIP uses two different categories of runtime surface:
+
+1. protocol-critical discovery flags
+2. default root fallbacks
+
+The `help` surface spans both categories:
+
+- protocol-critical discovery flags:
+  - `--help`
+  - `-h`
+- default root fallback:
+  - `help`
+
+If the author does not define a root command group or command named `help`, the following are equivalent:
+
+```text
+<binary> --help
+<binary> help
+```
+
+`--help` and `-h` remain reserved protocol flags and cannot be overridden.
+The root `help` command name itself is not reserved and may be author-owned.
+
+ACLIP also provides default root version fallbacks:
+
+- `--version`
+- `-V`
+- `-v`
+
+If the author sets `AclipApp.version`, a bare root invocation of these flags must print `<binary-name> <version>` as plain text.
+
+Unlike `--help` / `-h`, these version flags are not global protocol reservations.
+They are root-only fallbacks.
+Once a concrete command path has been selected, `--version`, `-V`, and `-v` belong to the author-owned command arguments.
+
+Subtree expansion is also reserved:
+
+- `--all`
+
+`--all` is only meaningful in help mode and expands the current subtree recursively.
+
+Examples:
+
+```text
+<binary> help --all
+<binary> note --help --all
+<binary> help note --all
+```
+
 ### 2.3 Interactive boundary
 
 ACLIP standardizes one-shot CLI invocations only.
@@ -83,21 +133,26 @@ If ACLIP later defines session support, that support should live in a reserved s
 
 That session control plane remains an optional extension draft, not a core requirement.
 
-### 2.4 Structured envelopes
+### 2.4 Runtime output
 
-An `aclip` CLI must emit structured JSON envelopes by default.
+Successful command stdout is author-owned.
 
-Result envelope:
+ACLIP does not require a canonical success envelope.
 
-```json
-{
-  "protocol": "aclip/0.1",
-  "type": "result",
-  "ok": true,
-  "command": "note create",
-  "data": {}
-}
-```
+Reference adapters may still provide convenience rendering for handler return values, but the core protocol does not assign success semantics to fields such as:
+
+- `protocol`
+- `ok`
+- `command`
+
+Structured JSON is still required for protocol-level errors.
+
+Optional control-plane hooks such as `auth`, `doctor`, and future extension surfaces should prefer:
+
+- a small structured success payload for machine state
+- an optional short `guidance_md` field for explanation or next steps
+
+They should not require long Markdown blobs as the primary success contract.
 
 Error envelope:
 
@@ -113,6 +168,12 @@ Error envelope:
   }
 }
 ```
+
+ACLIP also permits optional richer machine-useful error fields:
+
+- `category`
+- `retryable`
+- `hint`
 
 ### 2.5 Traditional exit codes
 
@@ -162,28 +223,6 @@ File-based credential declarations are also core:
 }
 ```
 
-### 2.8 Auth standard
-
-ACLIP reserves a small portable auth vocabulary.
-
-Current auth-related reserved error codes:
-
-- `auth_required`
-- `invalid_credential`
-- `expired_credential`
-
-ACLIP may also expose an optional reserved top-level `auth` command group when a product needs explicit auth lifecycle commands.
-
-Current recommended baseline:
-
-- `auth login`
-- `auth status`
-- `auth logout`
-
-These commands are optional and author-owned.
-
-ACLIP standardizes the surface shape, not provider-specific implementations.
-
 ### 2.7 Distribution reservation
 
 The manifest must reserve a `distribution` section even if the first milestone only uses local artifacts.
@@ -212,9 +251,46 @@ The protocol also reserves a minimal npm distribution form:
 
 This allows `aclim` and `acli` to build on the same contract later without forcing all adapters into one packaging model.
 
+### 2.8 Auth standard
+
+ACLIP reserves a small portable auth vocabulary.
+
+Current auth-related reserved error codes:
+
+- `auth_required`
+- `invalid_credential`
+- `expired_credential`
+
+ACLIP may also expose an optional reserved top-level `auth` command group when a product needs explicit auth lifecycle commands.
+
+Current recommended baseline:
+
+- `auth login`
+- `auth status`
+- `auth logout`
+
+These commands are optional and author-owned.
+
+ACLIP standardizes the surface shape, not provider-specific implementations.
+
+### 2.9 Doctor control plane
+
+ACLIP may expose an optional reserved top-level `doctor` command group.
+
+Current recommended baseline:
+
+- `doctor check`
+- `doctor fix`
+
+This control plane is optional and author-owned.
+
 ## 3. Index manifest
 
 The sidecar manifest is the offline discovery and distribution index.
+
+The manifest `name` is the canonical CLI command name.
+It is not a display title.
+It should match the default executable token a user or agent would actually invoke.
 
 Minimum fields:
 
@@ -269,11 +345,13 @@ The index manifest should stay small enough for first-pass agent discovery.
 - command group description
 - immediate child command groups when present
 - immediate child commands
-- one fixed next-step guidance line
 
 ### 4.3 Command help
 
 `<command-path...> --help` must render canonical Markdown containing command-level detail.
+
+The title-adjacent paragraph should prefer the command `description`.
+If description is absent, the renderer may fall back to `summary`.
 
 Minimum detail fields:
 
@@ -302,7 +380,8 @@ Each argument must declare:
 ### Level 2: Executable
 
 - all level 1 requirements
-- structured result and error envelopes
+- structured error envelopes
+- app-defined success output
 - traditional exit codes
 
 ### Level 3: Portable
@@ -323,8 +402,11 @@ Current files:
 - `schema/runtime-help-index.schema.json`
 - `schema/runtime-help-command-group.schema.json`
 - `schema/runtime-help-command.schema.json`
-- `schema/result.schema.json`
 - `schema/error.schema.json`
+
+Optional compatibility helper:
+
+- `schema/result.schema.json`
 
 Reference adapters must conform to these contracts instead of redefining protocol truth internally.
 
@@ -355,7 +437,6 @@ That means Python and TypeScript adapters must agree on:
 - manifest shape
 - runtime help payload shape
 - runtime Markdown section order
-- result envelope shape
 - error envelope shape
 - reserved `--help` semantics
 

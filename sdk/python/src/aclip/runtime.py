@@ -10,7 +10,7 @@ AUTH_ERROR_CODES = {
 }
 
 
-def encode_json(payload: dict[str, Any]) -> str:
+def encode_json(payload: Any) -> str:
     return json.dumps(payload, ensure_ascii=True, sort_keys=True)
 
 
@@ -26,14 +26,38 @@ def result_envelope(command: str, data: Any) -> dict[str, Any]:
     }
 
 
-def error_envelope(command: str, code: str, message: str) -> dict[str, Any]:
+def render_success_output(data: Any) -> str:
+    if data is None:
+        return ""
+    if isinstance(data, str):
+        return data if data.endswith("\n") else f"{data}\n"
+    return f"{encode_json(data)}\n"
+
+
+def error_envelope(
+    command: str,
+    code: str,
+    message: str,
+    *,
+    category: str | None = None,
+    retryable: bool | None = None,
+    hint: str | None = None,
+) -> dict[str, Any]:
+    error = {
+        "code": code,
+        "message": message,
+    }
+    if category is not None:
+        error["category"] = category
+    if retryable is not None:
+        error["retryable"] = retryable
+    if hint is not None:
+        error["hint"] = hint
+
     return {
         "protocol": "aclip/0.1",
         "type": "error",
         "ok": False,
         "command": command,
-        "error": {
-            "code": code,
-            "message": message,
-        },
+        "error": error,
     }

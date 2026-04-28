@@ -18,8 +18,9 @@ These files are the machine-readable truth source for:
 - runtime help index data
 - runtime help command group data
 - runtime help command data
-- result envelope
 - error envelope
+
+The optional compatibility helper `schema/result.schema.json` may still exist for SDK-owned convenience output, but it is not part of ACLIP core conformance.
 
 If a reference adapter changes behavior, tests should fail unless the behavior still matches these schemas.
 
@@ -41,10 +42,12 @@ Their job is:
 - let authors declare nested command trees while compiling them to flat runtime paths
 - let authors use decorator-based authoring on top of the same command contracts
 - let authors attach portable credential declarations and optional auth control-plane skeletons
+- let authors attach optional doctor control-plane skeletons
+- let authors attach CLI-level and command-level skill export hooks
 - reserve `--help` and `<command> --help` for protocol disclosure
 - render canonical Markdown help from structured help data
-- emit ACLIP result and error envelopes
-- expose SDK-owned packaging helpers for artifact generation
+- leave successful stdout author-owned while emitting ACLIP error envelopes
+- expose SDK-owned packaging helpers for artifact generation and skill-package export
 
 Their job is not:
 
@@ -60,7 +63,7 @@ Using Click or Commander internally does not change the ACLIP protocol surface:
 - authors may now declare nested `command_groups` and `commands`
 - authors may also use decorator registration instead of manual spec construction
 - ACLIP still renders canonical Markdown help itself
-- ACLIP still owns result and error envelopes
+- ACLIP still owns error envelopes and help semantics
 - adapter parser backends are implementation details
 
 ## 4. Build pipeline
@@ -69,11 +72,14 @@ Using Click or Commander internally does not change the ACLIP protocol surface:
 
 `sdk/typescript/examples/demo-notes/scripts/build.ts` is the equivalent TypeScript example build script and emits a sidecar manifest alongside a bundled Node CLI artifact.
 
+`sdk/python/examples/demo-notes/scripts/export_skills.py` and `sdk/typescript/examples/demo-notes/scripts/export-skills.ts` prove the same adapters can export Agent Skills-compatible packages from developer-authored `SKILL.md` directories.
+
 This proves:
 
 - protocol contracts can drive real CLIs in multiple languages
 - CLIs can be shipped through language-appropriate artifact pipelines
 - runtime Markdown help and offline manifest are related but not identical
+- skill-package export belongs in the protocol/sdk layer without collapsing into interoperability tooling
 
 ## 5. Why this separation matters
 

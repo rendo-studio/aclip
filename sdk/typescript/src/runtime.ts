@@ -20,7 +20,16 @@ export interface ErrorEnvelope {
   error: {
     code: string;
     message: string;
+    category?: string;
+    retryable?: boolean;
+    hint?: string;
   };
+}
+
+export interface ErrorEnvelopeOptions {
+  category?: string;
+  retryable?: boolean;
+  hint?: string;
 }
 
 export function encodeJson(payload: unknown): string {
@@ -37,7 +46,22 @@ export function resultEnvelope(command: string, data: unknown): ResultEnvelope {
   };
 }
 
-export function errorEnvelope(command: string, code: string, message: string): ErrorEnvelope {
+export function renderSuccessOutput(data: unknown): string {
+  if (data === undefined || data === null) {
+    return "";
+  }
+  if (typeof data === "string") {
+    return data.endsWith("\n") ? data : `${data}\n`;
+  }
+  return encodeJson(data);
+}
+
+export function errorEnvelope(
+  command: string,
+  code: string,
+  message: string,
+  options: ErrorEnvelopeOptions = {}
+): ErrorEnvelope {
   return {
     protocol: "aclip/0.1",
     type: "error",
@@ -45,7 +69,10 @@ export function errorEnvelope(command: string, code: string, message: string): E
     command,
     error: {
       code,
-      message
+      message,
+      ...(options.category ? { category: options.category } : {}),
+      ...(options.retryable !== undefined ? { retryable: options.retryable } : {}),
+      ...(options.hint ? { hint: options.hint } : {})
     }
   };
 }

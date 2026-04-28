@@ -1,11 +1,12 @@
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, extname, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import type { AclipApp } from "./app.js";
+import type { CliSkillHook, CommandSkillHook, CommandSpec } from "./contracts.js";
 
 export interface CliArtifact {
   entryPath: string;
@@ -13,12 +14,48 @@ export interface CliArtifact {
   manifest: Record<string, unknown>;
 }
 
+export interface ExportedSkillPackage {
+  name: string;
+  kind: "cli" | "command";
+  sourceDir: string;
+  outputDir: string;
+  commandPath?: string;
+}
+
+export interface SkillExportArtifact {
+  outputDir: string;
+  indexPath: string;
+  index: {
+    protocol: "aclip-skill-export/0.1";
+    cli: {
+      name: string;
+      version: string;
+    };
+    packages: Array<{
+      name: string;
+      kind: "cli" | "command";
+      path: string;
+      commandPath?: string;
+    }>;
+  };
+  packages: ExportedSkillPackage[];
+}
+
+interface SkillFrontmatter {
+  name: string;
+  description: string;
+  metadata: Record<string, string>;
+  compatibility?: string;
+  license?: string;
+  allowedTools?: string;
+  extras?: Record<string, string>;
+}
+
 export interface BuildCliOptions {
   factory?: string;
   appFactory?: string;
   projectRoot?: string;
   outDir?: string;
-  executableName?: string;
   packageName?: string;
   packageVersion?: string;
 }
@@ -64,11 +101,24 @@ export async function build_cli(
   const launcherFile = writeLauncherFile(tempDir, factoryInfo, defaultSdkImportSpecifier());
   const launcherEntry = relativeImportPath(projectRoot, launcherFile);
   const packageMetadata = readPackageMetadata(projectRoot);
-  const executableName = normalizedOptions.executableName ?? app.name;
+  const binaryName = app.name;
   const packageName = normalizedOptions.packageName ?? packageMetadata.name;
-  const packageVersion = normalizedOptions.packageVersion ?? packageMetadata.version;
+  if (!packageName) {
+    throw new Error("package name is required for build_cli; set packageName or define package.json.name");
+  }
+  const appVersion = requireAppVersion(app, "building the npm distribution metadata");
+  const packageVersion = normalizedOptions.packageVersion ?? appVersion;
+  if (
+    packageMetadata.version &&
+    packageMetadata.version !== packageVersion &&
+    normalizedOptions.packageVersion === undefined
+  ) {
+    throw new Error(
+      "package.json version does not match AclipApp.version; align them or set packageVersion explicitly"
+    );
+  }
   const tsupConfigFile = writeTsupConfigFile(tempDir, {
-    executableName,
+    binaryName,
     launcherEntry,
     outDir,
   });
@@ -84,7 +134,7 @@ export async function build_cli(
     rmSync(tempDir, { recursive: true, force: true });
   }
 
-  const entryPath = resolve(outDir, `${executableName}.cjs`);
+  const entryPath = resolve(outDir, `${binaryName}.cjs`);
   try {
     chmodSync(entryPath, 0o755);
   } catch {
@@ -92,23 +142,81 @@ export async function build_cli(
   }
 
   const manifest = app.buildIndexManifest({
-    binaryName: executableName,
     distribution: [
       {
         kind: "npm_package",
         package: packageName,
         version: packageVersion,
-        executable: executableName
+        executable: binaryName
       }
     ]
   });
-  const manifestPath = resolve(outDir, `${executableName}.aclip.json`);
+  const manifestPath = resolve(outDir, `${binaryName}.aclip.json`);
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
 
   return {
     entryPath,
     manifestPath,
     manifest
+  };
+}
+
+export async function export_skills(
+  app: AclipApp,
+  options: { outDir: string }
+): Promise<SkillExportArtifact> {
+  const outputDir = resolve(options.outDir);
+  mkdirSync(outputDir, { recursive: true });
+  const appVersion = requireAppVersion(app, "exporting skills");
+
+  const packages: ExportedSkillPackage[] = [];
+  const seenNames = new Set<string>();
+
+  for (const hook of app.cliSkills) {
+    packages.push(
+      exportSkillPackage({
+        app,
+        hook,
+        kind: "cli",
+        outputDir,
+        seenNames
+      })
+    );
+  }
+
+  for (const hook of app.commandSkills) {
+    packages.push(
+      exportSkillPackage({
+        app,
+        hook,
+        kind: "command",
+        outputDir,
+        seenNames
+      })
+    );
+  }
+
+  const index: SkillExportArtifact["index"] = {
+    protocol: "aclip-skill-export/0.1",
+    cli: {
+      name: app.name,
+      version: appVersion
+    },
+    packages: packages.map((entry) => ({
+      name: entry.name,
+      kind: entry.kind,
+      path: basename(entry.outputDir),
+      ...(entry.commandPath ? { commandPath: entry.commandPath } : {})
+    }))
+  };
+  const indexPath = resolve(outputDir, "skills.aclip.json");
+  writeFileSync(indexPath, JSON.stringify(index, null, 2), "utf8");
+
+  return {
+    outputDir,
+    indexPath,
+    index,
+    packages
   };
 }
 
@@ -238,15 +346,12 @@ function normalizeImportSpecifier(fromDir: string, specifier: string): string {
   return specifier;
 }
 
-function readPackageMetadata(projectRoot: string): { name: string; version: string } {
+function readPackageMetadata(projectRoot: string): { name?: string; version?: string } {
   const packageJsonPath = resolve(projectRoot, "package.json");
   const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
     name?: string;
     version?: string;
   };
-  if (!packageJson.name || !packageJson.version) {
-    throw new Error("package.json must define name and version for build_cli defaults");
-  }
   return {
     name: packageJson.name,
     version: packageJson.version
@@ -298,7 +403,7 @@ function runTsupBuild(options: {
 function writeTsupConfigFile(
   tempDir: string,
   options: {
-    executableName: string;
+    binaryName: string;
     launcherEntry: string;
     outDir: string;
   },
@@ -310,7 +415,7 @@ function writeTsupConfigFile(
       'import { defineConfig } from "tsup";',
       "",
       "export default defineConfig({",
-      `  entry: { ${JSON.stringify(options.executableName)}: ${JSON.stringify(options.launcherEntry)} },`,
+      `  entry: { ${JSON.stringify(options.binaryName)}: ${JSON.stringify(options.launcherEntry)} },`,
       `  outDir: ${JSON.stringify(options.outDir)},`,
       '  format: ["cjs"],',
       '  platform: "node",',
@@ -331,3 +436,224 @@ function writeTsupConfigFile(
 }
 
 export const build = build_cli;
+
+function exportSkillPackage(options: {
+  app: AclipApp;
+  hook: CliSkillHook | CommandSkillHook;
+  kind: "cli" | "command";
+  outputDir: string;
+  seenNames: Set<string>;
+}): ExportedSkillPackage {
+  const sourceDir = resolve(options.hook.sourceDir);
+  const skillMarkdownPath = resolve(sourceDir, "SKILL.md");
+  if (!existsSync(skillMarkdownPath)) {
+    throw new Error(`skill package must contain SKILL.md: ${sourceDir}`);
+  }
+
+  const { frontmatter, body } = parseSkillMarkdown(readFileSync(skillMarkdownPath, "utf8"));
+  validateSkillFrontmatter(frontmatter);
+
+  if (options.seenNames.has(frontmatter.name)) {
+    throw new Error(`duplicate exported skill package name: ${frontmatter.name}`);
+  }
+  options.seenNames.add(frontmatter.name);
+
+  const generatedMetadata: Record<string, string> = {
+    "aclip-hook-kind": options.kind,
+    "aclip-cli-name": options.app.name,
+    "aclip-cli-version": requireAppVersion(options.app, "exporting skills")
+  };
+  let commandPath: string | undefined;
+
+  if (hasGroup(options.app, "auth")) {
+    generatedMetadata["aclip-auth-group"] = "auth";
+  }
+  if (hasGroup(options.app, "doctor")) {
+    generatedMetadata["aclip-doctor-group"] = "doctor";
+  }
+
+  if (options.kind === "command") {
+    const commandHook = options.hook as CommandSkillHook;
+    const command = findCommand(options.app, commandHook.commandPath);
+    commandPath = command.path.join(" ");
+    generatedMetadata["aclip-command-path"] = commandPath;
+    generatedMetadata["aclip-command-summary"] = command.summary;
+    generatedMetadata["aclip-command-description"] = command.description;
+  }
+
+  const exportedFrontmatter: SkillFrontmatter = {
+    name: frontmatter.name,
+    description: frontmatter.description,
+    license: frontmatter.license,
+    compatibility: frontmatter.compatibility,
+    allowedTools: frontmatter.allowedTools,
+    extras: { ...(frontmatter.extras ?? {}) },
+    metadata: {
+      ...frontmatter.metadata,
+      ...((options.hook.metadata ?? {}) as Record<string, string>),
+      ...generatedMetadata
+    }
+  };
+
+  const destinationDir = resolve(options.outputDir, frontmatter.name);
+  rmSync(destinationDir, { recursive: true, force: true });
+  cpSync(sourceDir, destinationDir, { recursive: true });
+  writeFileSync(
+    resolve(destinationDir, "SKILL.md"),
+    renderSkillMarkdown(exportedFrontmatter, body),
+    "utf8"
+  );
+
+  return {
+    name: frontmatter.name,
+    kind: options.kind,
+    sourceDir,
+    outputDir: destinationDir,
+    ...(commandPath ? { commandPath } : {})
+  };
+}
+
+function parseSkillMarkdown(text: string): { frontmatter: SkillFrontmatter; body: string } {
+  const match = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/u.exec(text);
+  if (!match) {
+    throw new Error("SKILL.md must begin with YAML frontmatter");
+  }
+
+  const lines = match[1].split(/\r?\n/u);
+  const parsed = new Map<string, string>();
+  const metadata: Record<string, string> = {};
+  let index = 0;
+  while (index < lines.length) {
+    const line = lines[index];
+    if (!line.trim()) {
+      index += 1;
+      continue;
+    }
+    const separatorIndex = line.indexOf(":");
+    if (separatorIndex < 0) {
+      throw new Error(`invalid frontmatter line: ${line}`);
+    }
+    const key = line.slice(0, separatorIndex).trim();
+    const value = line.slice(separatorIndex + 1).trim();
+    if (key === "metadata") {
+      index += 1;
+      while (index < lines.length && lines[index].startsWith("  ")) {
+        const metadataLine = lines[index].trim();
+        const metadataSeparator = metadataLine.indexOf(":");
+        if (metadataSeparator < 0) {
+          throw new Error(`invalid metadata line: ${metadataLine}`);
+        }
+        const metadataKey = metadataLine.slice(0, metadataSeparator).trim();
+        const metadataValue = metadataLine.slice(metadataSeparator + 1).trim();
+        metadata[metadataKey] = parseFrontmatterScalar(metadataValue);
+        index += 1;
+      }
+      continue;
+    }
+    parsed.set(key, parseFrontmatterScalar(value));
+    index += 1;
+  }
+
+  const extras: Record<string, string> = {};
+  for (const [key, value] of parsed.entries()) {
+    if (!["name", "description", "compatibility", "license", "allowed-tools"].includes(key)) {
+      extras[key] = value;
+    }
+  }
+
+  return {
+    frontmatter: {
+      name: parsed.get("name") ?? "",
+      description: parsed.get("description") ?? "",
+      metadata,
+      compatibility: parsed.get("compatibility"),
+      license: parsed.get("license"),
+      allowedTools: parsed.get("allowed-tools"),
+      extras
+    },
+    body: match[2]
+  };
+}
+
+function renderSkillMarkdown(frontmatter: SkillFrontmatter, body: string): string {
+  const lines = ["---"];
+  lines.push(`name: ${renderFrontmatterScalar(frontmatter.name)}`);
+  lines.push(`description: ${renderFrontmatterScalar(frontmatter.description)}`);
+  if (frontmatter.license !== undefined) {
+    lines.push(`license: ${renderFrontmatterScalar(frontmatter.license)}`);
+  }
+  if (frontmatter.compatibility !== undefined) {
+    lines.push(`compatibility: ${renderFrontmatterScalar(frontmatter.compatibility)}`);
+  }
+  if (frontmatter.allowedTools !== undefined) {
+    lines.push(`allowed-tools: ${renderFrontmatterScalar(frontmatter.allowedTools)}`);
+  }
+  for (const key of Object.keys(frontmatter.extras ?? {}).sort()) {
+    lines.push(`${key}: ${renderFrontmatterScalar(frontmatter.extras?.[key] ?? "")}`);
+  }
+  if (Object.keys(frontmatter.metadata).length) {
+    lines.push("metadata:");
+    for (const key of Object.keys(frontmatter.metadata).sort()) {
+      lines.push(`  ${key}: ${renderFrontmatterScalar(frontmatter.metadata[key])}`);
+    }
+  }
+  lines.push("---");
+  lines.push("");
+  lines.push(body.replace(/^\r?\n/u, ""));
+  return `${lines.join("\n")}`;
+}
+
+function requireAppVersion(app: AclipApp, context: string): string {
+  if (!app.version?.trim()) {
+    throw new Error(`version is required when ${context}`);
+  }
+  return app.version;
+}
+
+function validateSkillFrontmatter(frontmatter: SkillFrontmatter): void {
+  if (!frontmatter.name) {
+    throw new Error("skill package frontmatter must define name");
+  }
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(frontmatter.name)) {
+    throw new Error("skill package name must use lowercase kebab-case");
+  }
+  if (!frontmatter.description) {
+    throw new Error("skill package frontmatter must define description");
+  }
+}
+
+function parseFrontmatterScalar(value: string): string {
+  if (value.startsWith("\"") && value.endsWith("\"")) {
+    return JSON.parse(value) as string;
+  }
+  if (value.startsWith("'") && value.endsWith("'")) {
+    return value.slice(1, -1);
+  }
+  return value;
+}
+
+function renderFrontmatterScalar(value: string): string {
+  if (!value) {
+    return "\"\"";
+  }
+  if (/^[A-Za-z0-9._/@ -]+$/u.test(value) && !value.includes(":")) {
+    return value;
+  }
+  return JSON.stringify(value);
+}
+
+function hasGroup(app: AclipApp, groupName: string): boolean {
+  return app.commandGroups.some((commandGroup) => commandGroup.path.length === 1 && commandGroup.path[0] === groupName);
+}
+
+function findCommand(app: AclipApp, commandPath: string[]): CommandSpec {
+  const command = app.commands.find(
+    (candidate) =>
+      candidate.path.length === commandPath.length &&
+      candidate.path.every((segment, index) => segment === commandPath[index])
+  );
+  if (!command) {
+    throw new Error(`unknown command path for skill export: ${commandPath.join(" ")}`);
+  }
+  return command;
+}

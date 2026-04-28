@@ -49,17 +49,16 @@ function renderGroup(payload: HelpCommandGroupPayload, toolName: string): string
   for (const command of payload.commands) {
     lines.push(`- \`${command.path}\`: ${command.summary}`);
   }
-  lines.push("", nextLine(toolName), "");
+  lines.push("");
   return lines.join("\n");
 }
 
 function renderCommand(payload: HelpCommandPayload): string {
+  const description = payload.description || payload.summary;
   const lines = [
     `# ${payload.path}`,
     "",
-    payload.summary,
-    "",
-    payload.description,
+    description,
     "",
     "## Usage",
     "",
@@ -89,11 +88,15 @@ function renderCommand(payload: HelpCommandPayload): string {
 
 function renderArgument(argument: Record<string, unknown>): string {
   const kind = String(argument.kind);
-  const label = "flag" in argument
+  const label = Array.isArray(argument.flags)
     ? kind === "boolean"
-      ? String(argument.flag)
-      : `${String(argument.flag)} ${kindToken(kind)}`
-    : `<${String(argument.position)}:${kind}>`;
+      ? argument.flags.map((flag) => String(flag)).join(", ")
+      : `${argument.flags.map((flag) => String(flag)).join(", ")} ${kindToken(kind)}`
+    : "flag" in argument
+      ? kind === "boolean"
+        ? String(argument.flag)
+        : `${String(argument.flag)} ${kindToken(kind)}`
+      : `<${String(argument.position)}:${kind}>`;
   const state = argument.required ? "required" : "optional";
   const suffixes: string[] = [];
 

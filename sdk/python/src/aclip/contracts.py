@@ -15,20 +15,32 @@ class ArgumentSpec:
     description: str
     required: bool = False
     flag: str | None = None
+    flags: tuple[str, ...] | list[str] | None = None
     positional: bool = False
     default: Any = None
     choices: list[str] | None = None
     multiple: bool = False
     env_var: str | None = None
 
-    def resolved_flag(self) -> str | None:
+    def resolved_flags(self) -> list[str]:
         if self.positional:
-            return None
-        return self.flag or f"--{self.name.replace('_', '-')}"
+            return []
+        if self.flag is not None and self.flags is not None:
+            raise ValueError("argument cannot declare both flag and flags")
+        if self.flags is not None and len(self.flags) == 0:
+            raise ValueError("argument flags must contain at least one alias")
+        if self.flags:
+            return list(self.flags)
+        return [self.flag or f"--{self.name.replace('_', '-')}"]
+
+    def resolved_flag(self) -> str | None:
+        flags = self.resolved_flags()
+        return flags[0] if flags else None
 
     def to_manifest(self) -> dict[str, Any]:
+        resolved_flags = self.resolved_flags()
         payload = {
-            "name": self.flag or self.name,
+            "name": resolved_flags[0] if resolved_flags else self.name,
             "kind": self.kind,
             "required": self.required,
             "description": self.description,
@@ -37,6 +49,8 @@ class ArgumentSpec:
             payload["position"] = self.name
         else:
             payload["flag"] = self.resolved_flag()
+            if len(resolved_flags) > 1:
+                payload["flags"] = resolved_flags
         if self.default is not None:
             payload["default"] = self.default
         if self.choices:
@@ -181,6 +195,19 @@ class DistributionSpec:
                 "executable": self.executable,
             }
         raise ValueError(f"unsupported distribution kind: {self.kind}")
+
+
+@dataclass(frozen=True)
+class CliSkillHook:
+    source_dir: str
+    metadata: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class CommandSkillHook:
+    command_path: tuple[str, ...]
+    source_dir: str
+    metadata: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

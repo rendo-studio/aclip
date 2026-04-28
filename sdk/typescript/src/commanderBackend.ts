@@ -1,5 +1,6 @@
 import { Command, CommanderError, Option } from "commander";
 
+import { resolveFlag, resolveFlags } from "./contracts.js";
 import type { ArgumentSpec, CommandPayload, CommandSpec } from "./contracts.js";
 
 export class CommanderBackendError extends Error {}
@@ -16,7 +17,7 @@ export async function parseCommandArguments(
   const remainingArgs = args.slice(command.path.length);
   return {
     command,
-    payload: await parseArgumentsForCommand(command, remainingArgs)
+    payload: await parseArgumentsForCommand(command, normalizeAliasTokens(command, remainingArgs))
   };
 }
 
@@ -63,7 +64,7 @@ async function parseArgumentsForCommand(commandSpec: CommandSpec, args: string[]
   const payload: CommandPayload = {};
 
   optionArguments.forEach((argument) => {
-    const value = options[argument.name];
+    const value = options[resolveOptionAttributeName(argument)];
     if (value !== undefined) {
       payload[argument.name] = normalizeValue(value);
     }
@@ -157,11 +158,84 @@ function kindToken(kind: ArgumentSpec["kind"]): string {
   return kind === "integer" ? "<integer>" : "<string>";
 }
 
-function resolveFlag(argument: ArgumentSpec): string | null {
+function resolveOptionAttributeName(argument: ArgumentSpec): string {
   if (argument.positional) {
-    return null;
+    return argument.name;
   }
-  return argument.flag ?? `--${argument.name.replaceAll("_", "-")}`;
+  const flag = resolveFlag(argument);
+  if (!flag) {
+    return argument.name;
+  }
+  const declarations = flag.split(",").map((token) => token.trim()).filter(Boolean);
+  const canonical = declarations.find((token) => token.startsWith("--")) ?? declarations[0];
+  const normalized = canonical.replace(/^--?/, "").replace(/^no-/, "");
+  if (!normalized) {
+    return argument.name;
+  }
+  const segments = normalized.split("-").filter(Boolean);
+  if (!segments.length) {
+    return argument.name;
+  }
+  return segments
+    .map((segment, index) => (index === 0 ? segment : `${segment[0].toUpperCase()}${segment.slice(1)}`))
+    .join("");
+}
+
+function normalizeAliasTokens(command: CommandSpec, args: string[]): string[] {
+  const aliasMap = new Map<string, { primary: string; argument: ArgumentSpec }>();
+
+  for (const argument of command.arguments) {
+    const flags = resolveFlags(argument);
+    const primary = flags[0];
+    if (!primary) {
+      continue;
+    }
+    for (const alias of flags.slice(1)) {
+      aliasMap.set(alias, { primary, argument });
+    }
+  }
+
+  const normalized: string[] = [];
+  for (const token of args) {
+    normalized.push(...normalizeAliasToken(token, aliasMap));
+  }
+  return normalized;
+}
+
+function normalizeAliasToken(
+  token: string,
+  aliasMap: Map<string, { primary: string; argument: ArgumentSpec }>
+): string[] {
+  const exact = aliasMap.get(token);
+  if (exact) {
+    return [exact.primary];
+  }
+
+  for (const [alias, entry] of aliasMap.entries()) {
+    if (alias.startsWith("--") && token.startsWith(`${alias}=`)) {
+      if (entry.primary.startsWith("--")) {
+        return [`${entry.primary}${token.slice(alias.length)}`];
+      }
+      return [entry.primary, token.slice(alias.length + 1)];
+    }
+
+    if (
+      !entry.argument.positional &&
+      entry.argument.kind !== "boolean" &&
+      alias.startsWith("-") &&
+      !alias.startsWith("--") &&
+      token.startsWith(alias) &&
+      token.length > alias.length
+    ) {
+      const remainder = token.slice(alias.length);
+      if (entry.primary.startsWith("--")) {
+        return [`${entry.primary}=${remainder}`];
+      }
+      return [entry.primary, remainder];
+    }
+  }
+
+  return [token];
 }
 
 function normalizeValue(value: unknown): unknown {

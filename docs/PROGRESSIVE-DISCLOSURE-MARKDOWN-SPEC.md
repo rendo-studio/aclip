@@ -177,8 +177,6 @@ If there are no top-level commands, the `## Commands` section is omitted.
 ## Commands
 
 - `<full command path>`: <summary>
-
-Next: run `<tool> <path> --help` for one command group or command shown above.
 ```
 
 If child command groups exist, they appear before `## Commands` as:
@@ -194,9 +192,7 @@ If child command groups exist, they appear before `## Commands` as:
 ```md
 # <command-path>
 
-<summary>
-
-<description paragraph>
+<description paragraph or summary fallback>
 
 ## Usage
 
@@ -231,7 +227,6 @@ No additional sections may appear before the canonical sections.
 - `summary` must not be omitted
 - `description` must not be omitted
 - `## Commands` must not be omitted
-- the fixed `Next:` guidance line must not be omitted
 
 ### 8.3 Command help
 
@@ -266,6 +261,9 @@ It must stay short:
 
 - root/group: one short paragraph
 - command: one short paragraph
+
+For command help rendering, the paragraph shown directly under the title should prefer `description`.
+If no description exists, the renderer may fall back to `summary`.
 
 ### 9.3 Arguments
 
@@ -329,7 +327,7 @@ Agents should be able to rely on:
 - explicit `required` / `optional`
 - explicit code-fenced `Usage` and `Examples`
 - flat bullet lists for arguments and command listings
-- one fixed next-step guidance line on root and command-group help
+- one fixed next-step guidance line on root help
 
 Agents should not need:
 

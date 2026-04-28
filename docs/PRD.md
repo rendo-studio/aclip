@@ -16,7 +16,8 @@ ACLIP exists to make a fourth path real:
 
 - natural CLI invocation
 - agent-first progressive disclosure
-- structured runtime outputs
+- author-owned success output
+- structured machine-readable errors
 - stable machine-readable contracts
 - cheap SDK authoring
 - future portability across registries, runtimes, and languages
@@ -50,7 +51,7 @@ That milestone is complete only when all of the following are true:
 
 1. the protocol truth source is explicit and enforceable
 2. the runtime help format is stable and protocol-level
-3. the runtime result and error shapes are stable and cross-language
+3. the runtime help and error shapes are stable and cross-language
 4. Python and TypeScript reference adapters conform to the same protocol surfaces
 5. each adapter can produce a real CLI artifact plus sidecar manifest
 
@@ -139,7 +140,7 @@ Rules:
 ### 6.1 Pain points and core answers
 
 - [x] **Q: What demand is ACLIP actually solving?**
-  **A:** ACLIP solves the need for a CLI standard that remains natural like a traditional CLI while standardizing the machine-facing parts that agents actually depend on: discovery, envelopes, auth declarations, and distribution reservation.
+  **A:** ACLIP solves the need for a CLI standard that remains natural like a traditional CLI while standardizing the machine-facing parts that agents actually depend on: discovery, failure semantics, auth declarations, and distribution reservation.
   **How this was completed:** This PRD now defines the core demand and final target explicitly. The protocol scope is enforced in [SPEC.md](D:/project/rendo/aclip/docs/SPEC.md).
 
 - [x] **Q: How does an ACLIP CLI run without forcing unnatural invocation?**
@@ -154,9 +155,9 @@ Rules:
   **A:** Runtime help is not ad hoc copywriting. It is a protocol surface with fixed section order, fixed omission rules, and fixed next-step guidance.
   **How this was completed:** The canonical runtime help rules live in [PROGRESSIVE-DISCLOSURE-MARKDOWN-SPEC.md](D:/project/rendo/aclip/docs/PROGRESSIVE-DISCLOSURE-MARKDOWN-SPEC.md), and schema-backed help payloads live under [schema](D:/project/rendo/aclip/schema).
 
-- [x] **Q: How do we keep command results parseable by agents?**
-  **A:** ACLIP requires structured JSON result and error envelopes by default.
-  **How this was completed:** The envelope contract lives in [SPEC.md](D:/project/rendo/aclip/docs/SPEC.md), [result.schema.json](D:/project/rendo/aclip/schema/result.schema.json), and [error.schema.json](D:/project/rendo/aclip/schema/error.schema.json), and is implemented in both adapters.
+- [x] **Q: How do we keep failures parseable without forcing successful commands into token-heavy envelopes?**
+  **A:** ACLIP no longer requires a structured success envelope. Successful stdout stays author-owned, while protocol-level failures remain structured through the error envelope and exit code contract.
+  **How this was completed:** The boundary is now defined in [SPEC.md](D:/project/rendo/aclip/docs/SPEC.md), [error.schema.json](D:/project/rendo/aclip/schema/error.schema.json), and both reference adapters.
 
 - [x] **Q: How do we keep protocol truth from collapsing into one SDK implementation?**
   **A:** Protocol truth is ordered: `schema/` first, protocol docs second, reference adapters third.
@@ -173,7 +174,7 @@ Rules:
 ### 6.2 Scope and architecture decisions
 
 - [x] **Q: What is inside ACLIP core today?**
-  **A:** Natural invocation, progressive disclosure, structured envelopes, credential declaration, distribution reservation, canonical schemas, and cross-language conformance.
+  **A:** Natural invocation, progressive disclosure, author-owned success output, structured errors, credential declaration, distribution reservation, canonical schemas, and cross-language conformance.
   **How this was completed:** The current core surface is defined in [SPEC.md](D:/project/rendo/aclip/docs/SPEC.md) and backed by [schema](D:/project/rendo/aclip/schema).
 
 - [x] **Q: What is explicitly outside ACLIP core today?**
@@ -186,25 +187,25 @@ Rules:
 
 ### 6.3 Accepted directions for next stages
 
-- [x] **Q: Should ACLIP provide interoperability surfaces such as `import mcp`, `export mcp`, `import openapi`, `import cli`, and `export skill`?**
-  **A:** Yes. These are worth doing, but they should be provided as ACLIP adapters, extensions, plugins, or ecosystem tooling rather than entering ACLIP core.
-  **How this was answered:** We concluded that ACLIP now has a more native protocol foundation than point solutions like `mcp2cli` or MCP command gateways. That makes these capabilities natural to add on top of ACLIP contracts. They still do not belong in core because they depend on external systems whose semantics evolve independently and often cannot be mapped without loss.
+- [x] **Q: Should ACLIP provide interoperability surfaces such as `import mcp`, `export mcp`, `import openapi`, and `import cli`?**
+  **A:** Yes, but only as ecosystem tooling.
+  **How this was answered:** We concluded that ACLIP now has a more native protocol foundation than point solutions like `mcp2cli` or MCP command gateways. That makes these capabilities natural to explore on top of ACLIP contracts. They still do not belong in core because they depend on external systems whose semantics evolve independently and often cannot be mapped without loss.
 
 - [x] **Q: Why should these interoperability capabilities stay outside ACLIP core?**
   **A:** Because they are interoperability concerns, not core CLI protocol semantics.
-  **How this was answered:** ACLIP core should standardize the stable contract for agent-native CLIs. By contrast, `import mcp`, `export mcp`, `import openapi`, `import cli`, and `export skill` all depend on external schemas, upstream protocol changes, and target-runtime conventions. Keeping them decoupled prevents fast-moving bridge logic from destabilizing the core.
+  **How this was answered:** ACLIP core should standardize the stable contract for agent-native CLIs. By contrast, `import mcp`, `export mcp`, `import openapi`, and `import cli` all depend on external schemas and upstream protocol changes. Keeping them decoupled prevents fast-moving bridge logic from destabilizing the core.
 
 - [x] **Q: Why is decoupled maintenance the correct strategy here?**
   **A:** Because these integrations will drift at different speeds and for different reasons.
-  **How this was answered:** MCP, OpenAPI ecosystems, legacy CLIs, and skill packaging targets will all change independently. If ACLIP core absorbs that churn directly, the core becomes harder to freeze and harder to reason about. If adapters and plugins absorb the churn instead, ACLIP can remain stable while ecosystem tooling keeps evolving.
+  **How this was answered:** MCP, OpenAPI ecosystems, and legacy CLIs will all change independently. If ACLIP core absorbs that churn directly, the core becomes harder to freeze and harder to reason about. If adapters and plugins absorb the churn instead, ACLIP can remain stable while ecosystem tooling keeps evolving.
 
 - [x] **Q: Will these import/export capabilities still be worth sustaining in the future if upstream systems improve?**
   **A:** Yes, but their value will likely shift.
   **How this was answered:** Even if MCP or other upstream systems eventually solve today’s biggest pain points natively, ACLIP-side adapters still retain value as bridge, migration, normalization, and export tooling. Over time they may become less important as substitutes and more important as interoperability layers. That is still worth sustaining, but it does not justify pulling them into core.
 
 - [x] **Q: Should ACLIP support skill export?**
-  **A:** Yes, but not as protocol truth. Skill export should be a derived ecosystem artifact generated from ACLIP contracts.
-  **How this was answered:** We decided that skills solve discoverability and agent instruction packaging, but they belong in `acli` or SDK tooling, not ACLIP core.
+  **A:** Yes. Skill export belongs in the ACLIP protocol/sdk layer as a first-party capability for producing Agent Skills-compatible skill packages.
+  **How this was answered:** We concluded that skill export should be built from ACLIP skill hooks, not from `workflows` as protocol truth and not through an external `acli` dependency. The current model is recorded in [SKILL-EXPORT-HOOKS-VPD.md](D:/project/rendo/aclip/docs/SKILL-EXPORT-HOOKS-VPD.md).
 
 - [x] **Q: Should `mcp2cli`-style work be absorbed, and where?**
   **A:** Yes, but the higher-value direction is MCP client to ACLI import or bridge tooling, not redefining ACLIP core around MCP server command gateways.
@@ -231,8 +232,8 @@ Rules:
   **How this was answered:** VPD review found that environment diagnosis and remediation are recurring real pains across agent-facing CLIs, while a mandatory `doctor` command would be unnecessary overhead for smaller tools. The current direction is recorded in [VPD-NEXT-ITERATION-DECISIONS.md](D:/project/rendo/aclip/docs/VPD-NEXT-ITERATION-DECISIONS.md).
 
 - [x] **Q: Should ACLIP provide a hook for named agent skills or workflows?**
-  **A:** Yes, but as optional metadata or export-layer hooks, not as core runtime command semantics.
-  **How this was answered:** We concluded that complex workflows need reusable task-oriented guidance, but that guidance should remain an extension surface that can feed skill export and agent packaging rather than polluting command execution semantics.
+  **A:** Yes for skill package hooks, no for `workflows` as protocol truth.
+  **How this was answered:** We concluded that ACLIP should expose CLI-level and command-level skill export hooks. Existing CLI and command metadata should act as alignment anchors, while the developer remains responsible for the actual skill package body and structure.
 
 - [x] **Q: Should ACLIP absorb lessons from FFmpeg, CLI-Anything plugin, OpenCLI, and `mcp2cli`?**
   **A:** Yes, selectively.
@@ -246,52 +247,65 @@ Rules:
   - core credential sources: `env` and `file`
   - reserved portable auth error codes: `auth_required`, `invalid_credential`, `expired_credential`
   - optional reserved `auth` control plane with `auth login`, `auth status`, and `auth logout`
+  - a recommended small `auth status` result shape with stable state vocabulary plus optional `next_actions` and `guidance_md`
   - detailed credential declarations in the sidecar manifest, not dumped into runtime help by default
   **How this was completed:** The contract is now written into [AUTH-STANDARD.md](D:/project/rendo/aclip/docs/AUTH-STANDARD.md) and [SPEC.md](D:/project/rendo/aclip/docs/SPEC.md), with matching SDK implementations in [sdk/python/src/aclip](D:/project/rendo/aclip/sdk/python/src/aclip) and [sdk/typescript/src](D:/project/rendo/aclip/sdk/typescript/src).
 
-- [ ] **Q: What is the minimum richer error contract for the next milestone?**
-  **A:** Not solved yet.
-  The next pass should answer:
-  - which extra error fields are core versus optional
-  - whether retryability is standardized
-  - how remediation hints are represented
-  - which codes are reserved versus author-defined
+- [x] **Q: What is the minimum richer error contract for the next milestone?**
+  **A:** Solved.
+  The minimum richer error contract now standardizes optional machine-useful fields:
+  - `category`
+  - `retryable`
+  - `hint`
+  while keeping author-defined error codes valid outside the reserved core vocabulary.
+  **How this was completed:** The contract is now reflected in [SPEC.md](D:/project/rendo/aclip/docs/SPEC.md), [schema/error.schema.json](D:/project/rendo/aclip/schema/error.schema.json), and both SDK runtime helpers.
 
-- [ ] **Q: What is the minimum `doctor` control plane shape?**
-  **A:** Not solved yet.
-  The next pass should answer:
-  - whether `doctor` is a reserved top-level command or command group
-  - what result payload shape it uses
-  - whether checks are categorized
-  - which exit-code and error interactions are required
+- [x] **Q: What is the minimum `doctor` control plane shape?**
+  **A:** Solved.
+  `doctor` is now defined as an optional reserved top-level command group with:
+  - `doctor check`
+  - `doctor fix`
+  and a recommended `checks` result payload vocabulary built around stable machine fields plus optional `guidance_md`.
+  **How this was completed:** The shape is now written in [DOCTOR-CONTROL-PLANE.md](D:/project/rendo/aclip/docs/DOCTOR-CONTROL-PLANE.md) and mirrored by both SDK control-plane skeleton helpers.
 
-- [ ] **Q: What is the minimum metadata shape for named agent skills or workflows?**
-  **A:** Not solved yet.
-  The next pass should answer:
-  - whether the hook is called `skills`, `workflows`, or another name
-  - what fields are mandatory
-  - whether it lives in the manifest, a sidecar companion, or export-only tooling
-  - how it maps to future skill export targets
+- [x] **Q: What should happen to the current `workflows` draft?**
+  **A:** Cut it back for now.
+  The repo explored manifest `workflows` metadata and SDK workflow helpers too early. `workflows` should stay withdrawn as protocol truth and should not be required for skill export.
+  **How this was completed:** The rationale is recorded in [WORKFLOW-HOOKS-AND-SKILL-EXPORT.md](D:/project/rendo/aclip/docs/WORKFLOW-HOOKS-AND-SKILL-EXPORT.md), and the current core schema plus reference SDK workflow surface has been removed.
 
-- [ ] **Q: What is the exact export format for skill generation?**
-  **A:** Not solved yet.
-  The next pass should decide whether ACLIP exports one canonical intermediate skill model or multiple target-specific generators.
+- [x] **Q: What is the minimum metadata shape for CLI-level and command-level skill export hooks?**
+  **A:** Solved.
+  The minimum hook shape is now:
+  - CLI-level hook: `source_dir` plus optional `metadata`
+  - command-level hook: `command_path`, `source_dir`, plus optional `metadata`
+  ACLIP then injects exported anchor metadata including:
+  - `aclip-hook-kind`
+  - `aclip-cli-name`
+  - `aclip-cli-version`
+  - optional `aclip-auth-group`
+  - optional `aclip-doctor-group`
+  - for command hooks: `aclip-command-path`, `aclip-command-summary`, `aclip-command-description`
+  **How this was completed:** The minimum surface is now implemented in both SDKs and documented in [SKILL-EXPORT-HOOKS-VPD.md](D:/project/rendo/aclip/docs/SKILL-EXPORT-HOOKS-VPD.md), [sdk/python/src/aclip/app.py](D:/project/rendo/aclip/sdk/python/src/aclip/app.py), [sdk/python/src/aclip/packaging.py](D:/project/rendo/aclip/sdk/python/src/aclip/packaging.py), [sdk/typescript/src/app.ts](D:/project/rendo/aclip/sdk/typescript/src/app.ts), and [sdk/typescript/src/packaging.ts](D:/project/rendo/aclip/sdk/typescript/src/packaging.ts).
+
+- [x] **Q: What is the export target for skill generation?**
+  **A:** Solved.
+  The export target should be an Agent Skills-compatible skill package with required `SKILL.md` and optional `scripts/`, `references/`, and `assets/`.
+  **How this was completed:** The target format and ACLIP-side posture are now described in [SKILL-EXPORT-HOOKS-VPD.md](D:/project/rendo/aclip/docs/SKILL-EXPORT-HOOKS-VPD.md), aligned with the Agent Skills documentation and specification.
 
 - [ ] **Q: What is the exact shape of `mcp -> acli` and `cli -> acli` tooling?**
   **A:** Not solved yet.
-  The next pass should decide whether these become `acli import ...` commands, standalone tools, or SDK-side generators.
+  We only know that these capabilities belong outside ACLIP core. The exact command surface remains open. See [INTEROPERABILITY-ARCHITECTURE.md](D:/project/rendo/aclip/docs/INTEROPERABILITY-ARCHITECTURE.md).
 
 - [ ] **Q: What is the exact adapter/plugin architecture for interoperability features?**
   **A:** Not solved yet.
-  The next pass should decide:
-  - whether interoperability lives under `acli`, separate packages, or both
-  - what the canonical adapter interface is
-  - what parts are maintained by first-party ACLIP tooling versus third-party plugins
-  - how import/export tools declare lossiness, unsupported features, and generated scaffolds
+  The boundary is clear, but the actual interface, plugin split, and lossiness-report contract are still open. See [INTEROPERABILITY-ARCHITECTURE.md](D:/project/rendo/aclip/docs/INTEROPERABILITY-ARCHITECTURE.md).
 
-- [ ] **Q: What is the exact syntax and semantics of `help` alias and `--all`?**
-  **A:** Not solved yet.
-  The direction is accepted, but the concrete protocol behavior is not yet written into [SPEC.md](D:/project/rendo/aclip/docs/SPEC.md).
+- [x] **Q: What is the exact syntax and semantics of `help` alias and `--all`?**
+  **A:** Solved.
+  - `help` is the default lightweight alias for canonical help when the author has not defined a root `help` command or group
+  - `--all` is only meaningful in help mode
+  - `--all` expands the current subtree recursively
+  **How this was completed:** The semantics are now written into [SPEC.md](D:/project/rendo/aclip/docs/SPEC.md) and implemented in both reference SDK runtimes.
 
 ## 7. Users
 
@@ -314,6 +328,8 @@ Rules:
 - standardize live-session PTY/REPL/TUI behavior
 - define every provider-specific auth flow now
 - make skill export the protocol truth source
+- treat `workflows` as the required model for skill export
+- pretend skill bodies can be fully auto-generated from CLI metadata alone
 - promise full automatic conversion for arbitrary legacy CLIs
 - absorb MCP/OpenAPI/legacy-CLI interoperability logic directly into ACLIP core
 

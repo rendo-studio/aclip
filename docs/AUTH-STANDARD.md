@@ -85,6 +85,44 @@ ACLIP may provide SDK skeletons for them, but authors still own:
 - storage
 - provider-specific flows
 
+### 4.1 Recommended `auth status` result shape
+
+Successful auth output remains author-owned.
+
+For agent-friendly interoperability, `auth status` should prefer a small structured payload:
+
+```json
+{
+  "state": "authenticated",
+  "principal": "dev@rendo.cn",
+  "expires_at": "2026-04-21T00:00:00Z",
+  "next_actions": [
+    {
+      "summary": "refresh before expiry",
+      "command": "notes auth login"
+    }
+  ]
+}
+```
+
+Recommended `state` vocabulary:
+
+- `authenticated`
+- `unauthenticated`
+- `expired`
+- `partial`
+- `unknown`
+
+Recommended optional fields:
+
+- `principal`
+- `expires_at`
+- `missing_credentials`
+- `next_actions`
+- `guidance_md`
+
+This keeps `auth status` small, predictable, and easy for agents to act on without forcing provider-specific fields into the core.
+
 ## 5. Runtime help versus sidecar metadata
 
 Detailed credential declarations belong in the sidecar manifest.

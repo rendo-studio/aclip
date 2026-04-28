@@ -4,8 +4,11 @@ import {
   createCommandSpec,
   credentialToManifest,
   distributionToManifest,
+  resolveFlags,
   type AppOptions,
   type BuildIndexManifestOptions,
+  type CliSkillHook,
+  type CommandSkillHook,
   type CommandGroupRegistration,
   type CommandRegistration,
   type CommandGroupSpec,
@@ -16,24 +19,29 @@ import {
 } from "./contracts.js";
 import { CommanderBackendError, parseCommandArguments } from "./commanderBackend.js";
 import { renderHelpMarkdown } from "./renderMarkdown.js";
-import { encodeJson, errorEnvelope, resultEnvelope } from "./runtime.js";
+import { encodeJson, errorEnvelope, renderSuccessOutput } from "./runtime.js";
 
 export interface RunIo {
   stdout: (text: string) => void;
   stderr: (text: string) => void;
 }
 
+const ROOT_VERSION_FLAGS = new Set(["--version", "-V", "-v"]);
+const CLI_TOKEN_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
+
 export class AclipApp {
   readonly name: string;
-  readonly version: string;
+  readonly version: string | undefined;
   readonly summary: string;
   readonly description: string;
-  readonly credentials;
+  readonly credentials: NonNullable<AppOptions["credentials"]>;
+  readonly cliSkills: CliSkillHook[];
+  readonly commandSkills: CommandSkillHook[];
 
   private readonly sourceCommands: CommandSpec[];
   private readonly sourceCommandGroups: CommandGroupSpec[];
-  private commands: CommandSpec[];
-  private commandGroups: CommandGroupSpec[];
+  commands: CommandSpec[];
+  commandGroups: CommandGroupSpec[];
 
   constructor(options: AppOptions) {
     this.name = options.name;
@@ -43,6 +51,15 @@ export class AclipApp {
     this.sourceCommands = [...(options.commands ?? [])];
     this.sourceCommandGroups = [...(options.commandGroups ?? [])];
     this.credentials = [...(options.credentials ?? [])];
+    this.cliSkills = (options.cliSkills ?? []).map((skill) => ({
+      sourceDir: skill.sourceDir,
+      metadata: { ...(skill.metadata ?? {}) }
+    }));
+    this.commandSkills = (options.commandSkills ?? []).map((skill) => ({
+      commandPath: this.normalizeSkillCommandPath(skill.commandPath),
+      sourceDir: skill.sourceDir,
+      metadata: { ...(skill.metadata ?? {}) }
+    }));
     const compiled = this.compileAuthoringTree(this.sourceCommands, this.sourceCommandGroups);
     this.commands = compiled.commands;
     this.commandGroups = compiled.commandGroups;
@@ -62,11 +79,34 @@ export class AclipApp {
     return new CommandGroupBuilder(group, () => this.refreshCompiledTree());
   }
 
+  addCliSkill(sourceDir: string, options: { metadata?: Record<string, string> } = {}): this {
+    this.cliSkills.push({
+      sourceDir,
+      metadata: { ...(options.metadata ?? {}) }
+    });
+    return this;
+  }
+
+  addCommandSkill(
+    commandPath: string[] | string,
+    sourceDir: string,
+    options: { metadata?: Record<string, string> } = {}
+  ): this {
+    this.commandSkills.push({
+      commandPath: this.normalizeSkillCommandPath(commandPath),
+      sourceDir,
+      metadata: { ...(options.metadata ?? {}) }
+    });
+    return this;
+  }
+
   buildIndexManifest(options: BuildIndexManifestOptions): Record<string, unknown> {
+    const version = this.requireVersion("building the manifest");
+    const manifestName = this.resolveManifestName(options.binaryName);
     return {
       protocol: "aclip/0.1",
-      name: options.binaryName,
-      version: this.version,
+      name: manifestName,
+      version,
       summary: this.summary,
       description: this.description,
       command_groups: this.commandGroups.map((commandGroup) => ({
@@ -148,14 +188,42 @@ export class AclipApp {
       return 0;
     }
 
-    const helpFlagIndex = argv.findIndex((token) => token === "--help" || token === "-h");
-    if (helpFlagIndex >= 0) {
-      const pathParts = argv.slice(0, helpFlagIndex).filter((token) => !token.startsWith("-"));
+    if (argv[0] === "help" && !this.hasRootHelpOverride()) {
+      const pathParts = argv.slice(1).filter((token) => !token.startsWith("-"));
+      const expandAll = argv.slice(1).includes("--all");
       try {
-        io.stdout(renderHelpMarkdown(this.buildHelpPayload(pathParts), this.name));
+        io.stdout(this.renderHelpResponse(pathParts, expandAll));
         return 0;
       } catch {
         io.stderr(encodeJson(errorEnvelope(pathParts.join(" ") || this.name, "validation_error", "unknown command path for --help")));
+        return 2;
+      }
+    }
+
+    const helpFlagIndex = argv.findIndex((token) => token === "--help" || token === "-h");
+    if (helpFlagIndex >= 0) {
+      const pathParts = argv.slice(0, helpFlagIndex).filter((token) => !token.startsWith("-"));
+      const expandAll = argv.slice(helpFlagIndex + 1).includes("--all");
+      try {
+        io.stdout(this.renderHelpResponse(pathParts, expandAll));
+        return 0;
+      } catch {
+        io.stderr(encodeJson(errorEnvelope(pathParts.join(" ") || this.name, "validation_error", "unknown command path for --help")));
+        return 2;
+      }
+    }
+
+    if (ROOT_VERSION_FLAGS.has(argv[0])) {
+      if (argv.length !== 1) {
+        io.stderr(encodeJson(errorEnvelope(this.name, "validation_error", "root --version does not accept additional arguments")));
+        return 2;
+      }
+      try {
+        io.stdout(this.renderVersionResponse());
+        return 0;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "version is not configured for this CLI";
+        io.stderr(encodeJson(errorEnvelope(this.name, "validation_error", message)));
         return 2;
       }
     }
@@ -171,7 +239,10 @@ export class AclipApp {
 
     try {
       const result = await parsed.command.handler(parsed.payload);
-      io.stdout(encodeJson(resultEnvelope(parsed.command.path.join(" "), result)));
+      const output = renderSuccessOutput(result);
+      if (output) {
+        io.stdout(output);
+      }
       return 0;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -193,6 +264,18 @@ export class AclipApp {
     };
   }
 
+  private renderHelpResponse(pathParts: string[], expandAll: boolean): string {
+    if (!expandAll) {
+      return renderHelpMarkdown(this.buildHelpPayload(pathParts), this.name);
+    }
+
+    const sections = [renderHelpMarkdown(this.buildHelpPayload(pathParts), this.name).trimEnd()];
+    for (const childPath of this.iterHelpChildPaths(pathParts)) {
+      sections.push(this.renderHelpResponse(childPath, true).trimEnd());
+    }
+    return `${sections.filter(Boolean).join("\n\n---\n\n")}\n`;
+  }
+
   private buildUsage(command: CommandSpec): string {
     const parts = [this.name, ...command.path];
     for (const argument of command.arguments) {
@@ -201,7 +284,7 @@ export class AclipApp {
         continue;
       }
 
-      const flag = argument.flag ?? `--${argument.name.replaceAll("_", "-")}`;
+      const flag = resolveFlags(argument)[0] ?? `--${argument.name.replaceAll("_", "-")}`;
       const token = argument.kind === "boolean" ? flag : `${flag} <${argument.kind}>`;
 
       if (argument.multiple && argument.required) {
@@ -275,6 +358,7 @@ export class AclipApp {
   }
 
   private validateProtocolReservedSurfaces(): void {
+    requireCliToken(this.name, "name");
     requireNonEmpty(this.summary, "summary");
     requireNonEmpty(this.description, "description");
 
@@ -317,9 +401,20 @@ export class AclipApp {
 
       for (const argument of command.arguments) {
         requireNonEmpty(argument.description, "description");
-        const resolvedFlag = argument.flag ?? `--${argument.name.replaceAll("_", "-")}`;
-        if (!argument.positional && (resolvedFlag === "--help" || resolvedFlag === "-h")) {
-          throw new Error("reserved help flag cannot be overridden");
+        if (argument.flag !== undefined && argument.flags !== undefined) {
+          throw new Error("argument cannot declare both flag and flags");
+        }
+        const resolvedFlags = resolveFlags(argument);
+        if (new Set(resolvedFlags).size !== resolvedFlags.length) {
+          throw new Error("argument flags must be unique");
+        }
+        for (const resolvedFlag of resolvedFlags) {
+          if (!resolvedFlag.startsWith("-")) {
+            throw new Error("argument flags must start with '-'");
+          }
+          if (resolvedFlag === "--help" || resolvedFlag === "-h") {
+            throw new Error("reserved help flag cannot be overridden");
+          }
         }
       }
 
@@ -340,6 +435,66 @@ export class AclipApp {
 
   private findGroup(pathParts: string[]): CommandGroupSpec | undefined {
     return this.commandGroups.find((commandGroup) => arraysEqual(commandGroup.path, pathParts));
+  }
+
+  private hasRootHelpOverride(): boolean {
+    return Boolean(this.findGroup(["help"]) ?? this.findCommand(["help"]));
+  }
+
+  private requireVersion(context: string): string {
+    if (!this.version?.trim()) {
+      throw new Error(`version is required when ${context}`);
+    }
+    return this.version;
+  }
+
+  private renderVersionResponse(): string {
+    if (!this.version?.trim()) {
+      throw new Error("version is not configured for this CLI");
+    }
+    return `${this.name} ${this.version}\n`;
+  }
+
+  private resolveManifestName(binaryName?: string): string {
+    if (binaryName === undefined || binaryName === this.name) {
+      return this.name;
+    }
+    throw new Error("binaryName override is no longer supported; AclipApp.name is the canonical CLI command name");
+  }
+
+  private iterHelpChildPaths(pathParts: string[]): string[][] {
+    if (!pathParts.length) {
+      const childGroups = this.commandGroups
+        .filter((commandGroup) => commandGroup.path.length === 1)
+        .map((commandGroup) => [...commandGroup.path]);
+      const childCommands = this.commands
+        .filter((command) => command.path.length === 1)
+        .map((command) => [...command.path]);
+      return [...childGroups, ...childCommands];
+    }
+
+    if (!this.findGroup(pathParts)) {
+      return [];
+    }
+
+    const childGroups = this.commandGroups
+      .filter((candidate) => isDirectChild(candidate.path, pathParts))
+      .map((candidate) => [...candidate.path]);
+    const childCommands = this.commands
+      .filter((candidate) => isDirectChild(candidate.path, pathParts))
+      .map((candidate) => [...candidate.path]);
+    return [...childGroups, ...childCommands];
+  }
+
+  private normalizeSkillCommandPath(commandPath: string[] | string): string[] {
+    const normalized =
+      typeof commandPath === "string"
+        ? commandPath.split(" ").filter(Boolean)
+        : [...commandPath];
+    if (!normalized.length) {
+      throw new Error("command skill path must contain at least one segment");
+    }
+    return normalized;
   }
 }
 
@@ -373,6 +528,13 @@ function defaultIo(): RunIo {
 function requireNonEmpty(value: string, fieldName: string): void {
   if (!value.trim()) {
     throw new Error(`${fieldName} must be a non-empty string`);
+  }
+}
+
+function requireCliToken(value: string, fieldName: string): void {
+  requireNonEmpty(value, fieldName);
+  if (!CLI_TOKEN_PATTERN.test(value)) {
+    throw new Error(`${fieldName} must be a CLI token using only letters, numbers, '.', '_' or '-', with no spaces`);
   }
 }
 

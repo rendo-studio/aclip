@@ -22,6 +22,11 @@
           "required": { "type": "boolean" },
           "description": { "type": "string", "minLength": 1 },
           "flag": { "type": "string" },
+          "flags": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "minItems": 2
+          },
           "position": { "type": "string" },
           "default": {},
           "choices": {

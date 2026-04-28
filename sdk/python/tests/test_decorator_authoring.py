@@ -3,7 +3,7 @@ import json
 from aclip import AclipApp
 
 
-def test_root_command_decorator_registration_builds_manifest_and_wraps_scalar_result(capsys):
+def test_root_command_decorator_registration_builds_manifest_and_preserves_scalar_output(capsys):
     app = AclipApp(
         name="demo",
         version="0.1.0",
@@ -16,14 +16,13 @@ def test_root_command_decorator_registration_builds_manifest_and_wraps_scalar_re
         """Show the current version."""
         return "0.1.0"
 
-    manifest = app.build_index_manifest(binary_name="demo")
+    manifest = app.build_index_manifest()
 
     assert manifest["commands"] == [{"path": "version", "summary": "Show the current version"}]
 
     exit_code = app.run(["version"])
     assert exit_code == 0
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["data"] == {"result": "0.1.0"}
+    assert capsys.readouterr().out == "0.1.0\n"
 
 
 def test_root_command_direct_registration_uses_callable_docstring_and_returns_app(capsys):
@@ -41,13 +40,12 @@ def test_root_command_direct_registration_uses_callable_docstring_and_returns_ap
     returned = app.command("version", handler=version, examples=["demo version"])
 
     assert returned is app
-    manifest = app.build_index_manifest(binary_name="demo")
+    manifest = app.build_index_manifest()
     assert manifest["commands"] == [{"path": "version", "summary": "Show the current version"}]
 
     exit_code = app.run(["version"])
     assert exit_code == 0
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["data"] == {"result": "0.1.0"}
+    assert capsys.readouterr().out == "0.1.0\n"
 
 
 def test_group_command_decorator_uses_docstring_for_summary_and_argument_descriptions():

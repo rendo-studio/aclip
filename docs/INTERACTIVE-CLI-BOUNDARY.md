@@ -8,7 +8,7 @@ ACLIP standardizes:
 
 - non-interactive command invocation
 - progressive runtime help
-- structured result and error envelopes
+- author-owned success output plus structured errors
 - credential declaration
 - distribution metadata
 

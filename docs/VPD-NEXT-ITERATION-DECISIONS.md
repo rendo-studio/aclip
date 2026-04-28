@@ -35,14 +35,14 @@ Anything that does not meet one of those thresholds should not enter the next AC
 
 - Agents still lack a standard CLI-level auth contract.
 - Large CLIs still need a standard diagnostic surface when commands fail, environments drift, or capability assumptions are wrong.
-- Complex multi-command workflows still need a stable place to attach agent-facing guidance without polluting normal command semantics.
+- Complex CLIs still need reusable skill-package export hooks, especially at the CLI and command level, without treating `workflows` as protocol truth.
 - Existing adapter ecosystems prove that bridge, import, and skill-export tooling is useful, but also prove that those layers evolve faster than any stable core protocol should.
 
 ### Deterministic trends
 
 - Agent-facing CLIs will keep needing explicit auth semantics because upstream service ecosystems are converging on OAuth, API keys, session tokens, and cached credentials rather than disappearing into one uniform model.
 - Complex CLIs will keep needing layered discovery and typed introspection as command surfaces grow.
-- Skill-like instruction packaging will remain useful because static reusable workflow guidance solves a different problem from runtime tools and APIs.
+- Agent Skills-style packaging will remain useful because reusable instructions, scripts, references, and assets solve a different problem from runtime tools and APIs.
 
 ## 4. Decisions
 
@@ -62,9 +62,9 @@ Anything that does not meet one of those thresholds should not enter the next AC
   **A:** The validated next set is:
   - `help` alias plus subtree-scoped `--all`
   - auth control surface and credential source semantics
-  - optional named agent workflow / skill hooks
+  - skill export hooks in the protocol/sdk layer
   - large-surface typed introspection patterns for future study
-  **Why:** These are the patterns repeatedly validated by ACLIP's own goals plus signals from ffmpeg, mcp2cli, OpenCLI, and CLI-Anything. They improve discoverability, remediation, or workflow reuse without forcing ACLIP into live-session scope.
+  **Why:** These are the patterns repeatedly validated by ACLIP's own goals plus signals from ffmpeg, mcp2cli, OpenCLI, CLI-Anything, and the Agent Skills open format. They improve discoverability, remediation, or workflow reuse without forcing ACLIP into live-session scope.
 
 ### 4.2 Auth standardization
 
@@ -83,15 +83,18 @@ Anything that does not meet one of those thresholds should not enter the next AC
 
 ### 4.3 Agent skill hooks
 
-- [x] **Q: Should ACLIP provide a hook for named agent skills / workflows?**
-  **A:** Yes, but as optional extension metadata, not as core runtime command semantics.
-  **Why:** Complex workflows often need higher-level intent packaging that spans multiple commands. CLI-Anything, mcp2cli, OpenCLI, and OpenClaw-style skill ecosystems all show that static workflow guidance is useful. But it should not replace the CLI contract itself.
-  **How it should land:** ACLIP should eventually define an optional metadata hook for named agent-facing workflows or skills that can:
-  - reference commands
-  - declare prerequisites
-  - attach task-oriented summaries
-  - feed skill export tooling
-  This metadata should live beside the manifest or in a derived export layer, not inside command execution semantics.
+- [x] **Q: Should ACLIP put skill export hooks into the current protocol/sdk line?**
+  **A:** Yes.
+  **Why:** The demand is real, the target skill format exists, and the earlier mistake was not "skill export itself" but incorrectly collapsing it into `workflows` and generic automatic conversion thinking.
+  **How it should land:** ACLIP should define:
+  - CLI-level skill package hooks
+  - command-level skill package hooks
+  - metadata alignment between ACLIP surfaces and Agent Skills package metadata
+  while keeping developer-authored skill content as the source of truth
+
+- [x] **Q: Should `workflows` remain the model for skill export?**
+  **A:** No.
+  **Why:** `workflows` were an overreach. They may later become an optional build input, but they should not be required or treated as the canonical export model.
 
 ### 4.4 What to absorb from ffmpeg
 
@@ -153,10 +156,18 @@ The next iteration should follow this order:
    Add machine-usable remediation hooks to core error semantics.
 3. **Doctor control plane draft**
    Standardize a reserved optional diagnostic surface.
-4. **Agent workflow / skill hook draft**
-   Define the minimum metadata shape for named workflows and future skill export.
+4. **Skill export hooks design**
+   Freeze the minimum CLI-level and command-level skill hook model for Agent Skills-compatible export in the ACLIP protocol/sdk layer.
 5. **Help alias plus subtree `--all`**
    Tighten the progressive disclosure ergonomics without adding paging complexity.
+
+Current status:
+
+- auth standard: complete
+- richer error contract: minimum version complete
+- doctor control plane: minimum version complete
+- skill export hooks: minimum version complete in both reference SDKs
+- help alias plus subtree `--all`: minimum version complete
 
 ## 6. What does not enter the next ACLIP core milestone
 
@@ -165,8 +176,10 @@ The following remain outside the next core milestone:
 - full provider-specific OAuth implementations
 - browser or daemon runtimes
 - live-session interaction protocols
+- `workflows` as protocol truth for skill export
+- full automatic generation of skill bodies from CLI metadata alone
 - usage-ranking systems
 - baked wrapper installation flows
 - full automatic CLI generation pipelines
 
-Those are still valuable, but they belong in ecosystem tooling, adapters, or later layers such as `acli`.
+Those are still valuable, but they belong in ecosystem tooling, optional extensions, or later layers beyond the current core line.

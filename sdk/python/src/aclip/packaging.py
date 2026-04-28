@@ -4,15 +4,18 @@ import hashlib
 import importlib
 import inspect
 import json
+import os
 import platform
+import re
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 from .app import AclipApp
-from .contracts import DistributionSpec
+from .contracts import CliSkillHook, CommandSkillHook, DistributionSpec
 
 
 AppFactory = Callable[[], AclipApp]
@@ -39,6 +42,34 @@ class AppTargetInfo:
     target: str
     app: AclipApp
     module_file: Path
+
+
+@dataclass(frozen=True)
+class ExportedSkillPackage:
+    name: str
+    kind: str
+    source_dir: Path
+    output_dir: Path
+    command_path: str | None = None
+
+
+@dataclass(frozen=True)
+class SkillExportArtifact:
+    output_dir: Path
+    index_path: Path
+    index: dict[str, Any]
+    packages: list[ExportedSkillPackage]
+
+
+@dataclass(frozen=True)
+class SkillFrontmatter:
+    name: str
+    description: str
+    metadata: dict[str, str]
+    compatibility: str | None = None
+    license: str | None = None
+    allowed_tools: str | None = None
+    extras: dict[str, str] | None = None
 
 
 def inspect_app_factory(target: str) -> AppFactoryInfo:
@@ -78,7 +109,6 @@ def build_cli(
     project_root: Path | None = None,
     source_root: Path | None = None,
     extra_paths: list[Path] | None = None,
-    executable_name: str | None = None,
     dist_dir: Path | None = None,
     build_dir: Path | None = None,
     runner: Runner | None = None,
@@ -110,7 +140,7 @@ def build_cli(
     try:
         return _build_binary_artifact(
             app=resolved_app,
-            binary_name=executable_name or resolved_app.name,
+            binary_name=resolved_app.name,
             hidden_imports=[factory_info.target.partition(":")[0]],
             entry_script=launcher_script,
             project_root=resolved_project_root,
@@ -167,7 +197,18 @@ def _build_binary_artifact(
         command.extend(["--hidden-import", module_name])
     command.append(str(entry_script))
 
-    runner(command, project_root)
+    original_pythonpath = os.environ.get("PYTHONPATH")
+    pythonpath_entries = [str(source_root), *(str(path) for path in (extra_paths or []))]
+    if original_pythonpath:
+        pythonpath_entries.append(original_pythonpath)
+    os.environ["PYTHONPATH"] = os.pathsep.join(pythonpath_entries)
+    try:
+        runner(command, project_root)
+    finally:
+        if original_pythonpath is None:
+            os.environ.pop("PYTHONPATH", None)
+        else:
+            os.environ["PYTHONPATH"] = original_pythonpath
 
     binary_filename = f"{binary_name}.exe" if sys.platform.startswith("win") else binary_name
     binary_path = dist_dir / binary_filename
@@ -345,6 +386,254 @@ def _write_launcher_script(build_dir: Path, app_factory: str) -> Path:
         encoding="utf-8",
     )
     return launcher_path
+
+
+def export_skills(app: AclipApp, *, output_dir: Path | str) -> SkillExportArtifact:
+    resolved_output_dir = Path(output_dir).resolve()
+    resolved_output_dir.mkdir(parents=True, exist_ok=True)
+    app_version = _require_app_version(app, "exporting skills")
+
+    exported_packages: list[ExportedSkillPackage] = []
+    seen_names: set[str] = set()
+
+    for hook in app.cli_skills:
+        exported_packages.append(
+            _export_skill_package(
+                app=app,
+                hook=hook,
+                kind="cli",
+                output_dir=resolved_output_dir,
+                seen_names=seen_names,
+            )
+        )
+    for hook in app.command_skills:
+        exported_packages.append(
+            _export_skill_package(
+                app=app,
+                hook=hook,
+                kind="command",
+                output_dir=resolved_output_dir,
+                seen_names=seen_names,
+            )
+        )
+
+    index = {
+        "protocol": "aclip-skill-export/0.1",
+        "cli": {
+            "name": app.name,
+            "version": app_version,
+        },
+        "packages": [
+            {
+                "name": package.name,
+                "kind": package.kind,
+                "path": package.output_dir.name,
+                **(
+                    {"commandPath": package.command_path}
+                    if package.command_path is not None
+                    else {}
+                ),
+            }
+            for package in exported_packages
+        ],
+    }
+    index_path = resolved_output_dir / "skills.aclip.json"
+    index_path.write_text(json.dumps(index, ensure_ascii=True, indent=2), encoding="utf-8")
+    return SkillExportArtifact(
+        output_dir=resolved_output_dir,
+        index_path=index_path,
+        index=index,
+        packages=exported_packages,
+    )
+
+
+def _export_skill_package(
+    *,
+    app: AclipApp,
+    hook: CliSkillHook | CommandSkillHook,
+    kind: str,
+    output_dir: Path,
+    seen_names: set[str],
+) -> ExportedSkillPackage:
+    source_dir = Path(hook.source_dir).resolve()
+    skill_markdown_path = source_dir / "SKILL.md"
+    if not skill_markdown_path.exists():
+        raise ValueError(f"skill package must contain SKILL.md: {source_dir}")
+
+    frontmatter, body = _parse_skill_markdown(skill_markdown_path.read_text(encoding="utf-8"))
+    _validate_skill_frontmatter(frontmatter)
+
+    if frontmatter.name in seen_names:
+        raise ValueError(f"duplicate exported skill package name: {frontmatter.name}")
+    seen_names.add(frontmatter.name)
+
+    generated_metadata = {
+        "aclip-hook-kind": kind,
+        "aclip-cli-name": app.name,
+        "aclip-cli-version": _require_app_version(app, "exporting skills"),
+    }
+    command_path: str | None = None
+    if _has_group(app, "auth"):
+        generated_metadata["aclip-auth-group"] = "auth"
+    if _has_group(app, "doctor"):
+        generated_metadata["aclip-doctor-group"] = "doctor"
+
+    if isinstance(hook, CommandSkillHook):
+        command = _find_command(app, hook.command_path)
+        command_path = command.command_name()
+        generated_metadata.update(
+            {
+                "aclip-command-path": command_path,
+                "aclip-command-summary": command.summary,
+                "aclip-command-description": command.description,
+            }
+        )
+
+    merged_metadata = dict(frontmatter.metadata)
+    merged_metadata.update(hook.metadata)
+    merged_metadata.update(generated_metadata)
+    exported_frontmatter = SkillFrontmatter(
+        name=frontmatter.name,
+        description=frontmatter.description,
+        metadata=merged_metadata,
+        compatibility=frontmatter.compatibility,
+        license=frontmatter.license,
+        allowed_tools=frontmatter.allowed_tools,
+        extras=dict(frontmatter.extras or {}),
+    )
+
+    destination_dir = output_dir / frontmatter.name
+    if destination_dir.exists():
+        shutil.rmtree(destination_dir)
+    shutil.copytree(source_dir, destination_dir)
+    (destination_dir / "SKILL.md").write_text(
+        _render_skill_markdown(exported_frontmatter, body),
+        encoding="utf-8",
+    )
+
+    return ExportedSkillPackage(
+        name=frontmatter.name,
+        kind=kind,
+        source_dir=source_dir,
+        output_dir=destination_dir,
+        command_path=command_path,
+    )
+
+
+def _require_app_version(app: AclipApp, context: str) -> str:
+    version = getattr(app, "version", None)
+    if version is None or not str(version).strip():
+        raise ValueError(f"version is required when {context}")
+    return str(version)
+
+
+def _parse_skill_markdown(text: str) -> tuple[SkillFrontmatter, str]:
+    match = re.match(r"\A---\r?\n(?P<frontmatter>.*?)\r?\n---\r?\n?(?P<body>.*)\Z", text, re.S)
+    if not match:
+        raise ValueError("SKILL.md must begin with YAML frontmatter")
+
+    raw_frontmatter = match.group("frontmatter").splitlines()
+    parsed: dict[str, str] = {}
+    metadata: dict[str, str] = {}
+    extras: dict[str, str] = {}
+    index = 0
+    while index < len(raw_frontmatter):
+        line = raw_frontmatter[index]
+        if not line.strip():
+            index += 1
+            continue
+        if ":" not in line:
+            raise ValueError(f"invalid frontmatter line: {line}")
+        key, raw_value = line.split(":", 1)
+        key = key.strip()
+        value = raw_value.strip()
+        if key == "metadata":
+            index += 1
+            while index < len(raw_frontmatter) and raw_frontmatter[index].startswith("  "):
+                metadata_line = raw_frontmatter[index].strip()
+                if ":" not in metadata_line:
+                    raise ValueError(f"invalid metadata line: {metadata_line}")
+                metadata_key, metadata_value = metadata_line.split(":", 1)
+                metadata[metadata_key.strip()] = _parse_frontmatter_scalar(metadata_value.strip())
+                index += 1
+            continue
+        parsed[key] = _parse_frontmatter_scalar(value)
+        index += 1
+
+    for key, value in parsed.items():
+        if key not in {"name", "description", "compatibility", "license", "allowed-tools"}:
+            extras[key] = value
+
+    return (
+        SkillFrontmatter(
+            name=parsed.get("name", ""),
+            description=parsed.get("description", ""),
+            metadata=metadata,
+            compatibility=parsed.get("compatibility"),
+            license=parsed.get("license"),
+            allowed_tools=parsed.get("allowed-tools"),
+            extras=extras,
+        ),
+        match.group("body"),
+    )
+
+
+def _render_skill_markdown(frontmatter: SkillFrontmatter, body: str) -> str:
+    lines = ["---"]
+    lines.append(f"name: {_render_frontmatter_scalar(frontmatter.name)}")
+    lines.append(f"description: {_render_frontmatter_scalar(frontmatter.description)}")
+    if frontmatter.license is not None:
+        lines.append(f"license: {_render_frontmatter_scalar(frontmatter.license)}")
+    if frontmatter.compatibility is not None:
+        lines.append(f"compatibility: {_render_frontmatter_scalar(frontmatter.compatibility)}")
+    if frontmatter.allowed_tools is not None:
+        lines.append(f"allowed-tools: {_render_frontmatter_scalar(frontmatter.allowed_tools)}")
+    for key, value in sorted((frontmatter.extras or {}).items()):
+        lines.append(f"{key}: {_render_frontmatter_scalar(value)}")
+    if frontmatter.metadata:
+        lines.append("metadata:")
+        for key, value in sorted(frontmatter.metadata.items()):
+            lines.append(f"  {key}: {_render_frontmatter_scalar(value)}")
+    lines.append("---")
+    lines.append("")
+    lines.append(body.lstrip("\r\n"))
+    return "\n".join(lines)
+
+
+def _validate_skill_frontmatter(frontmatter: SkillFrontmatter) -> None:
+    if not frontmatter.name:
+        raise ValueError("skill package frontmatter must define name")
+    if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", frontmatter.name):
+        raise ValueError("skill package name must use lowercase kebab-case")
+    if not frontmatter.description:
+        raise ValueError("skill package frontmatter must define description")
+
+
+def _parse_frontmatter_scalar(value: str) -> str:
+    if value.startswith('"') and value.endswith('"'):
+        return json.loads(value)
+    if value.startswith("'") and value.endswith("'"):
+        return value[1:-1]
+    return value
+
+
+def _render_frontmatter_scalar(value: str) -> str:
+    if not value:
+        return '""'
+    if re.fullmatch(r"[A-Za-z0-9._/@ -]+", value) and ":" not in value:
+        return value
+    return json.dumps(value, ensure_ascii=True)
+
+
+def _has_group(app: AclipApp, group_name: str) -> bool:
+    return any(command_group.path == (group_name,) for command_group in app.command_groups)
+
+
+def _find_command(app: AclipApp, command_path: tuple[str, ...]):
+    for command in app.commands:
+        if command.path == command_path:
+            return command
+    raise ValueError(f"unknown command path for skill export: {' '.join(command_path)}")
 
 
 build = build_cli

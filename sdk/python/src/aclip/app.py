@@ -2,14 +2,26 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import re
 import sys
 from typing import Any
 
 from .click_backend import ClickParserError, parse_command_arguments
-from .contracts import ArgumentSpec, CommandGroupSpec, CommandSpec, CredentialSpec, DistributionSpec
+from .contracts import (
+    ArgumentSpec,
+    CliSkillHook,
+    CommandSkillHook,
+    CommandGroupSpec,
+    CommandSpec,
+    CredentialSpec,
+    DistributionSpec,
+)
 from .decorators import CommandGroupBuilder, command_from_callable, command_from_handler
 from .render_markdown import render_help_markdown
-from .runtime import encode_json, error_envelope, result_envelope
+from .runtime import encode_json, error_envelope, render_success_output
+
+ROOT_VERSION_FLAGS = {"--version", "-V", "-v"}
+CLI_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$")
 
 
 class AclipApp:
@@ -17,12 +29,14 @@ class AclipApp:
         self,
         *,
         name: str,
-        version: str,
+        version: str | None = None,
         summary: str,
         description: str,
         commands: list[CommandSpec] | None = None,
         command_groups: list[CommandGroupSpec] | None = None,
         credentials: list[CredentialSpec] | None = None,
+        cli_skills: list[CliSkillHook] | None = None,
+        command_skills: list[CommandSkillHook] | None = None,
     ) -> None:
         self.name = name
         self.version = version
@@ -35,18 +49,22 @@ class AclipApp:
             command_groups=self._source_command_groups,
         )
         self.credentials = credentials or []
+        self.cli_skills = list(cli_skills or [])
+        self.command_skills = list(command_skills or [])
         self._validate_protocol_reserved_surfaces()
 
     def build_index_manifest(
         self,
         *,
-        binary_name: str,
+        binary_name: str | None = None,
         distribution: list[DistributionSpec] | None = None,
     ) -> dict[str, Any]:
+        version = self._require_version("building the manifest")
+        manifest_name = self._resolve_manifest_name(binary_name)
         return {
             "protocol": "aclip/0.1",
-            "name": binary_name,
-            "version": self.version,
+            "name": manifest_name,
+            "version": version,
             "summary": self.summary,
             "description": self.description,
             "command_groups": [
@@ -160,14 +178,12 @@ class AclipApp:
             print(render_help_markdown(self.build_help_payload(), self.name), end="")
             return 0
 
-        help_flag_index = next(
-            (index for index, token in enumerate(args) if token in {"--help", "-h"}),
-            None,
-        )
-        if help_flag_index is not None:
-            help_path = [token for token in args[:help_flag_index] if not token.startswith("-")]
+        if args[0] == "help" and not self._has_root_help_override():
+            help_path = [token for token in args[1:] if not token.startswith("-")]
+            expand_all = "--all" in args[1:]
             try:
-                payload = self.build_help_payload(help_path)
+                print(self._render_help_response(help_path, expand_all=expand_all), end="")
+                return 0
             except KeyError:
                 print(
                     encode_json(
@@ -181,8 +197,53 @@ class AclipApp:
                 )
                 return 2
 
-            print(render_help_markdown(payload, self.name), end="")
-            return 0
+        help_flag_index = next(
+            (index for index, token in enumerate(args) if token in {"--help", "-h"}),
+            None,
+        )
+        if help_flag_index is not None:
+            help_path = [token for token in args[:help_flag_index] if not token.startswith("-")]
+            expand_all = "--all" in args[help_flag_index + 1 :]
+            try:
+                print(self._render_help_response(help_path, expand_all=expand_all), end="")
+                return 0
+            except KeyError:
+                print(
+                    encode_json(
+                        error_envelope(
+                            " ".join(help_path) or self.name,
+                            "validation_error",
+                            "unknown command path for --help",
+                        )
+                    ),
+                    file=sys.stderr,
+                )
+                return 2
+
+        if args[0] in ROOT_VERSION_FLAGS:
+            if len(args) != 1:
+                print(
+                    encode_json(
+                        error_envelope(
+                            self.name,
+                            "validation_error",
+                            "root --version does not accept additional arguments",
+                        )
+                    ),
+                    file=sys.stderr,
+                )
+                return 2
+            try:
+                sys.stdout.write(self._render_version_response())
+                return 0
+            except ValueError as exc:
+                print(
+                    encode_json(
+                        error_envelope(self.name, "validation_error", str(exc))
+                    ),
+                    file=sys.stderr,
+                )
+                return 2
 
         try:
             command, payload = parse_command_arguments(
@@ -207,6 +268,7 @@ class AclipApp:
             result = command.handler(payload)
             if inspect.isawaitable(result):
                 result = asyncio.run(result)
+            output = render_success_output(result)
         except Exception as exc:  # pragma: no cover - defensive runtime path
             print(
                 encode_json(
@@ -216,7 +278,8 @@ class AclipApp:
             )
             return 1
 
-        print(encode_json(result_envelope(command.command_name(), result)))
+        if output:
+            sys.stdout.write(output)
         return 0
 
     def command(
@@ -265,6 +328,36 @@ class AclipApp:
         self._source_command_groups.append(group)
         self._refresh_compiled_tree()
         return CommandGroupBuilder(self, group)
+
+    def add_cli_skill(
+        self,
+        source_dir: str | Any,
+        *,
+        metadata: dict[str, str] | None = None,
+    ) -> "AclipApp":
+        self.cli_skills.append(
+            CliSkillHook(
+                source_dir=str(source_dir),
+                metadata=dict(metadata or {}),
+            )
+        )
+        return self
+
+    def add_command_skill(
+        self,
+        command_path: str | tuple[str, ...] | list[str],
+        source_dir: str | Any,
+        *,
+        metadata: dict[str, str] | None = None,
+    ) -> "AclipApp":
+        self.command_skills.append(
+            CommandSkillHook(
+                command_path=self._normalize_skill_command_path(command_path),
+                source_dir=str(source_dir),
+                metadata=dict(metadata or {}),
+            )
+        )
+        return self
 
     def _find_command(self, path_parts: list[str]) -> CommandSpec:
         path = tuple(path_parts)
@@ -342,6 +435,7 @@ class AclipApp:
         self._validate_protocol_reserved_surfaces()
 
     def _validate_protocol_reserved_surfaces(self) -> None:
+        self._require_cli_token(self.name, "name")
         self._require_non_empty_text(self.summary, "summary")
         self._require_non_empty_text(self.description, "description")
 
@@ -373,9 +467,16 @@ class AclipApp:
 
             for argument in command.arguments:
                 self._require_non_empty_text(argument.description, "description")
-                resolved_flag = argument.resolved_flag()
-                if resolved_flag in {"--help", "-h"}:
-                    raise ValueError("reserved help flag cannot be overridden")
+                if argument.flag is not None and argument.flags is not None:
+                    raise ValueError("argument cannot declare both flag and flags")
+                resolved_flags = argument.resolved_flags()
+                if len(resolved_flags) != len(set(resolved_flags)):
+                    raise ValueError("argument flags must be unique")
+                for resolved_flag in resolved_flags:
+                    if not resolved_flag.startswith("-"):
+                        raise ValueError("argument flags must start with '-'")
+                    if resolved_flag in {"--help", "-h"}:
+                        raise ValueError("reserved help flag cannot be overridden")
 
             if not command.examples:
                 raise ValueError("examples must contain at least one entry")
@@ -410,3 +511,84 @@ class AclipApp:
     def _require_non_empty_text(self, value: str, field_name: str) -> None:
         if not isinstance(value, str) or not value.strip():
             raise ValueError(f"{field_name} must be a non-empty string")
+
+    def _require_cli_token(self, value: str, field_name: str) -> None:
+        self._require_non_empty_text(value, field_name)
+        if not CLI_TOKEN_PATTERN.fullmatch(value):
+            raise ValueError(
+                f"{field_name} must be a CLI token using only letters, numbers, '.', '_' or '-', with no spaces"
+            )
+
+    def _require_version(self, context: str) -> str:
+        if self.version is None or not str(self.version).strip():
+            raise ValueError(f"version is required when {context}")
+        return self.version
+
+    def _render_version_response(self) -> str:
+        version = str(self.version).strip() if self.version is not None else ""
+        if not version:
+            raise ValueError("version is not configured for this CLI")
+        return f"{self.name} {version}\n"
+
+    def _resolve_manifest_name(self, binary_name: str | None) -> str:
+        if binary_name is None or binary_name == self.name:
+            return self.name
+        raise ValueError(
+            "binary_name override is no longer supported; AclipApp.name is the canonical CLI command name"
+        )
+
+    def _has_root_help_override(self) -> bool:
+        return self._find_group(["help"]) is not None or any(
+            command.path == ("help",) for command in self.commands
+        )
+
+    def _render_help_response(self, path_parts: list[str], *, expand_all: bool) -> str:
+        if not expand_all:
+            return render_help_markdown(self.build_help_payload(path_parts), self.name)
+
+        sections = [render_help_markdown(self.build_help_payload(path_parts), self.name).rstrip()]
+        for child_path in self._iter_help_child_paths(path_parts):
+            sections.append(self._render_help_response(child_path, expand_all=True).rstrip())
+        return "\n\n---\n\n".join(section for section in sections if section) + "\n"
+
+    def _iter_help_child_paths(self, path_parts: list[str]) -> list[list[str]]:
+        if not path_parts:
+            child_groups = [
+                list(command_group.path)
+                for command_group in self.command_groups
+                if len(command_group.path) == 1
+            ]
+            child_commands = [
+                list(command.path)
+                for command in self.commands
+                if len(command.path) == 1
+            ]
+            return [*child_groups, *child_commands]
+
+        if self._find_group(path_parts) is None:
+            return []
+
+        child_groups = [
+            list(command_group.path)
+            for command_group in self.command_groups
+            if tuple(command_group.path[: len(path_parts)]) == tuple(path_parts)
+            and len(command_group.path) == len(path_parts) + 1
+        ]
+        child_commands = [
+            list(command.path)
+            for command in self.commands
+            if tuple(command.path[: len(path_parts)]) == tuple(path_parts)
+            and len(command.path) == len(path_parts) + 1
+        ]
+        return [*child_groups, *child_commands]
+
+    def _normalize_skill_command_path(
+        self, command_path: str | tuple[str, ...] | list[str]
+    ) -> tuple[str, ...]:
+        if isinstance(command_path, str):
+            normalized = tuple(part for part in command_path.split(" ") if part)
+        else:
+            normalized = tuple(command_path)
+        if not normalized:
+            raise ValueError("command skill path must contain at least one segment")
+        return normalized

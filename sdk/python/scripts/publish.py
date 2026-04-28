@@ -48,16 +48,19 @@ def alias_readme(version: str) -> str:
         f"""\
         # aclip
 
-        `aclip` is the official short-name Python package for ACLIP.
+        `aclip` is the official short-name Python package for the ACLIP Python SDK.
 
-        It is published in lockstep with `rendo-aclip` and installs the same SDK release.
+        It is published in lockstep with `rendo-aclip` and installs the same SDK release:
 
-        Use `aclip` if you want the shortest install command.
-        Use `rendo-aclip` if you want the canonical dependency name in project manifests.
+        - `aclip` if you want the shortest install command
+        - `rendo-aclip` if you want the canonical dependency name in project manifests
+
+        This alias package intentionally keeps its description minimal.
+        For the full SDK documentation, examples, release notes, and current API guidance, see the canonical package page:
+
+        - <https://pypi.org/project/rendo-aclip/>
 
         ## Install
-
-        Short-name install:
 
         ```bash
         pip install aclip
@@ -75,55 +78,7 @@ def alias_readme(version: str) -> str:
         from aclip import AclipApp
         ```
 
-        ## What ACLIP gives you
-
-        - natural CLI invocation
-        - progressive Markdown help
-        - structured result and error envelopes
-        - sidecar manifests for distribution metadata
-        - packaging helpers for shipping binary CLIs
-
-        ## First Working CLI
-
-        ```python
-        from aclip import AclipApp, run_cli
-
-
-        def create_app() -> AclipApp:
-            app = AclipApp(
-                name="notes",
-                version="{version}",
-                summary="A minimal notes CLI.",
-                description="Create and list notes from a small local CLI.",
-            )
-
-            app.group(
-                "note",
-                summary="Manage notes",
-                description="Create and inspect notes.",
-            ).command(
-                "create",
-                summary="Create a note",
-                examples=["notes note create --title hello --body world"],
-                handler=lambda title, body: {{"note": {{"title": title, "body": body}}}},
-            )
-
-            return app
-
-
-        run_cli("notes_cli.app:create_app")
-        ```
-
-        Typical usage:
-
-        ```bash
-        notes --help
-        notes note --help
-        notes note create --help
-        notes note create --title hello --body world
-        ```
-
-        Installing `aclip` installs `rendo-aclip=={version}`.
+        Installing `aclip=={version}` installs `rendo-aclip=={version}`.
         """
     )
 
@@ -138,7 +93,7 @@ def alias_pyproject(version: str) -> str:
         [project]
         name = "{ALIAS_NAME}"
         version = "{version}"
-        description = "Synchronized alias package for rendo-aclip"
+        description = "Short-name alias for rendo-aclip; see the canonical package page for full documentation"
         readme = "README.md"
         requires-python = ">=3.12"
         license = "MIT"
