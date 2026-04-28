@@ -441,7 +441,7 @@ function writeTsupConfigFile(
       "  sourcemap: false,",
       "  silent: true,",
       "  splitting: false,",
-      '  noExternal: ["commander"],',
+      `  noExternal: [${JSON.stringify(options.sdkPackageName)}, "commander"],`,
       "  esbuildOptions(buildOptions) {",
       "    buildOptions.alias = {",
       "      ...(buildOptions.alias ?? {}),",

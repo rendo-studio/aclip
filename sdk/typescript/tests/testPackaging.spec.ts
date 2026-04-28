@@ -1,7 +1,7 @@
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
 import Ajv2020 from "ajv/dist/2020";
@@ -123,7 +123,9 @@ describe("build_cli", () => {
     });
     expect(sdkBuild.status).toBe(0);
 
-    const artifact = await build_cli({
+    const distModule = await import(`${pathToFileURL(resolve(projectRoot, "dist", "index.js")).href}?t=${Date.now()}`);
+
+    const artifact = await distModule.build_cli({
       factory: `${fixtureApp}:app`,
       projectRoot,
       outDir,
@@ -278,7 +280,7 @@ describe("build_cli", () => {
   test("export_skills rejects packages without SKILL.md", async () => {
     const app = new AclipApp({
       name: "notes",
-      version: "0.3.3",
+      version: "0.3.4",
       summary: "A minimal notes CLI.",
       description: "Create and inspect notes."
     });
